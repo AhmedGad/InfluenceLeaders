@@ -6,11 +6,10 @@ import java.sql.Statement;
 public class Database {
 
 	static Connection con;
-
 	static Connection getConnection() throws Exception {
 		if (con == null) {
-			String unicode = "?useUnicode=yes&characterEncoding=UTF-8";
-			String url = "jdbc:mysql://localhost:3306/twitter";
+			String unicode = "?useServerPrepStmts=false&rewriteBatchedStatements=true";
+			String url = "jdbc:mysql://localhost:3306/mydb";
 			String user = "root";
 			String password = "root";
 			con = DriverManager.getConnection(url + unicode, user, password);
