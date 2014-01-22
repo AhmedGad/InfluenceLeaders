@@ -25,7 +25,7 @@ public class Main_Graph {
 
 	// connection to dataBase
 	static Connection con;
-	static long totalNodes = 0, totalEdges = 0;
+	static long totalEdges = 0;
 	static PreparedStatement pstmt_Queue, pstmt_Graph, pstmt_UserId;
 	static Statement globalStmt;
 	static ArrayList<Long> tmpList;
@@ -73,7 +73,8 @@ public class Main_Graph {
 				accesstokens[tokenIndex][1], accesstokens[tokenIndex][2],
 				accesstokens[tokenIndex][3]));
 
-		System.out.println("Token : " + tokenIndex + ", User ID : " + userId + ", Cursor : " + cursor);
+		System.out.println("Token : " + tokenIndex + ", User ID : " + userId + ", Cursor : "
+				+ cursor);
 		IDs list = null;
 		try {
 			do {
@@ -84,7 +85,8 @@ public class Main_Graph {
 						// add element to list
 						tmpList.add(ids[i]);
 					}
-
+				
+				totalEdges += ids.length;
 				cursor = list.getNextCursor();
 			} while (list.hasNext());
 		} catch (Exception e) {
@@ -103,20 +105,18 @@ public class Main_Graph {
 		FileWriter writer = new FileWriter(new File("tweets-per-minute"
 				+ System.currentTimeMillis() + ".txt"));
 		int minutes = 1;
-		long prevNodes = totalNodes, prevEdges = totalEdges;
+		long prevEdges = totalEdges;
 		while (true) {
 			try {
 				Thread.sleep(60000);
-				System.out.println("minute \t" + minutes + ":\tTotal Nodes:\t"
-						+ (totalNodes - prevNodes) + "\tTotal Edges:\t" + (totalEdges - prevEdges)
+				System.out.println("minute \t" + minutes + "\tTotal Edges:\t"
+						+ (totalEdges - prevEdges) + "\n");
+
+				writer.write("minute \t" + minutes + ":\tTotal Edges:\t" + (totalEdges - prevEdges)
 						+ "\n");
 
-				writer.write("minute \t" + minutes + ":\tTotal Nodes:\t" + (totalNodes - prevNodes)
-						+ "\tTotal Edges:\t" + (totalEdges - prevEdges) + "\n");
-
-				prevNodes = totalNodes;
 				prevEdges = totalEdges;
-				
+
 				minutes++;
 				writer.flush();
 			} catch (InterruptedException e) {
@@ -237,7 +237,6 @@ public class Main_Graph {
 
 				// update total Sum
 				totalEdges += tmpList.size();
-				totalNodes++;
 			} catch (Exception e) {
 				e.printStackTrace();
 			}
