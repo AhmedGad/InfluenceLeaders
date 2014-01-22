@@ -1,0 +1,17 @@
+create table UserId(
+    ID BigInt,
+    PRIMARY KEY ( ID )
+);
+
+create table Graph(
+    ID1 BigInt,
+    ID2 BIgInt,
+    
+    FOREIGN KEY ( ID1 ) REFERENCES UserId ( ID ),
+    FOREIGN KEY ( ID2 ) REFERENCES UserId ( ID )
+);
+
+create table Queue(
+    ID BigInt,
+    FOREIGN KEY ( ID ) REFERENCES UserId ( ID )
+);
