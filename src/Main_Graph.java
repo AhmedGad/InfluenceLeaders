@@ -19,7 +19,7 @@ import twitter4j.conf.ConfigurationBuilder;
 
 public class Main_Graph {
 	// to be computed on runtime
-	static int totalTokens = 0;
+	static int totalTokens = 0, flushLimit = 1000;
 
 	static String accesstokens[][];
 
@@ -85,7 +85,7 @@ public class Main_Graph {
 						// add element to list
 						tmpList.add(ids[i]);
 					}
-				
+
 				totalEdges += ids.length;
 				cursor = list.getNextCursor();
 			} while (list.hasNext());
@@ -215,7 +215,9 @@ public class Main_Graph {
 				} while (cursor != -1);
 
 				// flush data into the database
-				for (long k : tmpList) {
+				for (int i = 0; i < tmpList.size(); i++) {
+					long k = tmpList.get(i);
+
 					pstmt_UserId.setLong(1, k);
 					pstmt_UserId.addBatch();
 
@@ -225,12 +227,20 @@ public class Main_Graph {
 					pstmt_Graph.setLong(1, u);
 					pstmt_Graph.setLong(2, k);
 					pstmt_Graph.addBatch();
+
+					if (i > 0 && i % flushLimit == 0) {
+						// execute commands
+						pstmt_UserId.executeBatch();
+						pstmt_Queue.executeBatch();
+						pstmt_Graph.executeBatch();
+					}
 				}
 
 				// execute commands
 				pstmt_UserId.executeBatch();
 				pstmt_Queue.executeBatch();
 				pstmt_Graph.executeBatch();
+	
 
 				// remove that element from Queue
 				removeQueueElement(u);
