@@ -1,17 +1,26 @@
-create table UserId(
-    ID BigInt,
-    PRIMARY KEY ( ID )
+create table userid(
+    id BigInt,
+    PRIMARY KEY ( id )
 );
 
-create table Graph(
-    ID1 BigInt,
-    ID2 BIgInt,
+create table graph(
+    id1 BigInt,
+    id2 BIgInt,
     
-    FOREIGN KEY ( ID1 ) REFERENCES UserId ( ID ),
-    FOREIGN KEY ( ID2 ) REFERENCES UserId ( ID )
+    FOREIGN KEY ( id1 ) REFERENCES userid ( id ),
+    FOREIGN KEY ( id2 ) REFERENCES userid ( id )
 );
 
-create table Queue(
-    ID BigInt,
-    FOREIGN KEY ( ID ) REFERENCES UserId ( ID )
+create table queue(
+    id BigInt,
+    FOREIGN KEY ( id ) REFERENCES userid ( id )
 );
+
+
+delete from userid;
+delete from queue;
+delete from graph;
+
+insert into userid value(280089745);
+insert into queue value(280089745);
+

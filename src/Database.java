@@ -1,11 +1,13 @@
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Statement;
 
 public class Database {
 
 	static Connection con;
+
 	static Connection getConnection() throws Exception {
 		if (con == null) {
 			String unicode = "?useServerPrepStmts=false&rewriteBatchedStatements=true";
@@ -19,12 +21,18 @@ public class Database {
 
 	public static void main(String[] args) throws Exception {
 		Connection con = getConnection();
-		Statement st = con.createStatement();
-		ResultSet res = st.executeQuery("select * from tweet;");
-		while (res.next()) {
-			if (res.getString(1) != null) {
-				System.out.println(res.getString(1) + "\n");
-			}
+		con.setAutoCommit(false);
+		PreparedStatement st = con
+				.prepareStatement("insert into userid value(?)");
+		long t1 = System.currentTimeMillis();
+		for (int i = 0; i < 1000; i++) {
+			st.setLong(1, (long) (Math.random() * 1000000000000000000L));
+			st.addBatch();
 		}
+		System.out.println(System.currentTimeMillis() - t1);
+		t1 = System.currentTimeMillis();
+		st.executeBatch();
+		System.out.println(System.currentTimeMillis() - t1);
+		con.commit();
 	}
 }
