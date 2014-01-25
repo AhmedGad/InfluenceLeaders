@@ -1,6 +1,8 @@
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -8,6 +10,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Queue;
 import java.util.TreeSet;
@@ -20,6 +23,20 @@ import twitter4j.conf.Configuration;
 import twitter4j.conf.ConfigurationBuilder;
 
 public class Main_Graph_v2 {
+	private static Configuration getConfiguration(String ConsumerKey,
+			String ConsumerSecret, String AccessToken, String TokenSecret) {
+		ConfigurationBuilder cb = new ConfigurationBuilder();
+		cb.setDebugEnabled(true).setOAuthConsumerKey(ConsumerKey)
+				.setOAuthConsumerSecret(ConsumerSecret)
+				.setOAuthAccessToken(AccessToken)
+				.setOAuthAccessTokenSecret(TokenSecret);
+		return cb.build();
+	}
+
+	private static Twitter getTwitterInstance(Configuration conf) {
+		return new TwitterFactory(conf).getInstance();
+	}
+
 	// to be computed on runtime
 	static int totalTokens = 0, flushLimit = 1000;
 	static Queue<Integer> freeTokens = new ArrayDeque<Integer>();
@@ -38,20 +55,10 @@ public class Main_Graph_v2 {
 	static int max_batch_size = 100000;
 	static int database_cnt = 0;
 	private static int collected_cnt = 0;
+	private static int total_fetched = 0;
 
-	private static Configuration getConfiguration(String ConsumerKey,
-			String ConsumerSecret, String AccessToken, String TokenSecret) {
-		ConfigurationBuilder cb = new ConfigurationBuilder();
-		cb.setDebugEnabled(true).setOAuthConsumerKey(ConsumerKey)
-				.setOAuthConsumerSecret(ConsumerSecret)
-				.setOAuthAccessToken(AccessToken)
-				.setOAuthAccessTokenSecret(TokenSecret);
-		return cb.build();
-	}
-
-	private static Twitter getTwitterInstance(Configuration conf) {
-		return new TwitterFactory(conf).getInstance();
-	}
+	static Queue<ArrayList<Long>> graphQueue;
+	private static int threadNum = 30;
 
 	static synchronized long pop() {
 		// check unfinished first
@@ -63,39 +70,88 @@ public class Main_Graph_v2 {
 		return usersQueue.poll();
 	}
 
-	static Queue<ArrayList<Long>> graphQueue;
-	private static int threadNum = 30;
-
-	static synchronized void push(long uid) throws SQLException {
-		usersQueue.add(uid);
-		st.execute("insert into userid value(" + uid + ");");
-		st.execute("insert into queue value(" + uid + ");");
-	}
-
 	static synchronized void add_unfinished_user_entry(long uid, long cursor,
 			ArrayList<Long> followers) {
-
 		unfinished_queue.add(uid);
+		unfinished_map.put(uid, new UserEntry(cursor, followers));
 
-		UserEntry entry = unfinished_map.get(uid);
-		if (entry == null) {
-			unfinished_map.put(uid, new UserEntry(cursor, followers));
-		} else {
-			entry.cursor = cursor;
-			entry.followers = followers;
+	}
+
+	public static void fetch(int tokenIndex, int threadIndex)
+			throws TwitterException, Exception {
+
+		Twitter twitter = getTwitterInstance(getConfiguration(
+				accesstokens[tokenIndex][0], accesstokens[tokenIndex][1],
+				accesstokens[tokenIndex][2], accesstokens[tokenIndex][3]));
+
+		long curUser = -1, curCursor = -1;
+		ArrayList<Long> followers = null;
+		boolean userOk = true;
+
+		while (true) {
+			try {
+				// pick user from the queue
+				if ((curUser = pop()) > -1) {
+					if (unfinished_map.containsKey((Long) curUser)) {
+						UserEntry entry = unfinished_map.remove((Long) curUser);
+						curCursor = entry.cursor;
+						followers = entry.followers;
+					}
+					userOk = false;
+					followers = new ArrayList<Long>();
+					// user with index = 0 is the followed user
+					followers.add(curUser);
+					while (true) {
+						IDs res = twitter.getFollowersIDs(curUser, curCursor);
+						long[] followers_ar = res.getIDs();
+						curCursor = res.getNextCursor();
+						for (int i = 0; i < followers_ar.length; i++)
+							followers.add(followers_ar[i]);
+
+						total_fetched += followers_ar.length;
+
+						if (!res.hasNext()) {
+							graphQueue.add(followers);
+							collected_cnt += followers.size() - 1;
+							userOk = true;
+							curCursor = -1;
+							break;
+						}
+					}
+				} else {
+					// if users queue is empty - sleep 1 sec
+					Thread.sleep(1000);
+				}
+			} catch (Exception e) {
+				if (e instanceof TwitterException) {
+					if (((TwitterException) e).getLocalizedMessage()
+							.startsWith("401:Authentication credentials")) {
+						userOk = true;
+						st.execute("delete from queue where id = " + curUser);
+					}
+				}
+				throw e;
+			} finally {
+				if (!userOk) {
+					add_unfinished_user_entry(curUser, curCursor, followers);
+				}
+			}
 		}
 	}
 
-	public static void writer() throws SQLException, InterruptedException {
-
+	@SuppressWarnings("resource")
+	public static void writer() throws SQLException, InterruptedException,
+			IOException {
+		FileWriter logWriter = new FileWriter(new File(("log"
+				+ System.currentTimeMillis() + ".txt")));
 		PreparedStatement userid_insertion = con
-				.prepareStatement("insert into userid value(?)");
+				.prepareStatement("insert into userid values(?)");
 
 		PreparedStatement graph_insertion = con
-				.prepareStatement("insert into graph value(?, ?);");
+				.prepareStatement("insert into graph values(?, ?)");
 
 		PreparedStatement queue_insertion = con
-				.prepareStatement("insert into queue value(?)");
+				.prepareStatement("insert into queue values(?)");
 
 		// I think better commint if windows
 		con.setAutoCommit(false);
@@ -103,15 +159,13 @@ public class Main_Graph_v2 {
 		ArrayList<Long> cur = null;
 
 		while (true) {
-			if (graphQueue.size() > 0)
-				System.out.println(graphQueue.size());
 			try {
 				if (!graphQueue.isEmpty()) {
 					synchronized (graphQueue) {
 						cur = graphQueue.poll();
 					}
-					System.out.println("===\t try to write " + cur.size()
-							+ " record.");
+					// System.out.println("===\t try to write " + cur.size()
+					// + " record.");
 					// followed user
 					Long uid1, uid2 = cur.get(0);
 					int last = 0;
@@ -145,9 +199,19 @@ public class Main_Graph_v2 {
 					}
 
 					st.execute("delete from queue where id = " + uid2);
-					System.out.println("finish writing " + cur.size()
+					System.out.println("finish writing " + (cur.size() - 1)
 							+ " records in "
-							+ (System.currentTimeMillis() - t1));
+							+ (System.currentTimeMillis() - t1)
+							+ " millis, waited list " + graphQueue.size()
+							+ " user id " + uid2);
+					logWriter.write("finish writing " + (cur.size() - 1)
+							+ " records in "
+							+ (System.currentTimeMillis() - t1)
+							+ " millis, waited list " + graphQueue.size()
+							+ " user id " + uid2 + "\n");
+					logWriter.flush();
+				} else {
+					Thread.sleep(1000);
 				}
 			} catch (Exception e) {
 				e.printStackTrace();
@@ -158,57 +222,29 @@ public class Main_Graph_v2 {
 		}
 	}
 
-	public static void run(int tokenIndex, int threadIndex)
-			throws TwitterException, Exception {
-
-		Twitter twitter = getTwitterInstance(getConfiguration(
-				accesstokens[tokenIndex][0], accesstokens[tokenIndex][1],
-				accesstokens[tokenIndex][2], accesstokens[tokenIndex][3]));
-
-		long curUser = -1, curCursor = -1;
-		ArrayList<Long> followers = null;
-		boolean userOk = true;
-
+	@SuppressWarnings("resource")
+	static void printCnt() throws IOException {
+		FileWriter writer = new FileWriter(new File("counters"
+				+ System.currentTimeMillis() + ".txt"));
+		int min = 0;
 		while (true) {
-			try {
-				// pick user from the queue
-				if ((curUser = pop()) > -1) {
-					userOk = false;
-					followers = new ArrayList<Long>();
-					// user with index = 0 is the followed user
-					followers.add(curUser);
-					while (true) {
-						IDs res = twitter.getFollowersIDs(curUser, curCursor);
-						long[] followers_ar = res.getIDs();
-						curCursor = res.getNextCursor();
-						for (int i = 0; i < followers_ar.length; i++)
-							followers.add(followers_ar[i]);
+			System.out.println("\n\nmin: " + min++ + " written to database, "
+					+ database_cnt + " fetched, " + collected_cnt + " gap, "
+					+ (collected_cnt - database_cnt) + " databas queue size : "
+					+ graphQueue.size() + " total fetched: " + total_fetched
+					+ "\n\n");
 
-						collected_cnt += followers_ar.length;
-						if (!res.hasNext()) {
-							graphQueue.add(followers);
-							userOk = true;
-							curCursor = -1;
-							break;
-						}
-					}
-				} else {
-					// if users queue is empty - sleep 1 sec
-					Thread.sleep(1000);
-				}
-			} catch (Exception e) {
-				if (e instanceof TwitterException) {
-					if (((TwitterException) e).getLocalizedMessage()
-							.startsWith("401:Authentication credentials")) {
-						userOk = true;
-						st.execute("delete from queue where id = " + curUser);
-					}
-				}
-				throw e;
-			} finally {
-				if (!userOk) {
-					add_unfinished_user_entry(curUser, curCursor, followers);
-				}
+			writer.write("min: " + min++ + " written to database, "
+					+ database_cnt + " fetched, " + collected_cnt + " gap, "
+					+ (collected_cnt - database_cnt) + " databas queue size : "
+					+ graphQueue.size() + " total fetched: " + total_fetched
+					+ "\n");
+			writer.flush();
+			try {
+				Thread.sleep(60000);
+			} catch (InterruptedException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
 			}
 		}
 	}
@@ -225,11 +261,17 @@ public class Main_Graph_v2 {
 			userId.add(res.getLong(1));
 		}
 
+		ArrayList<Long> list = new ArrayList<Long>();
+		
 		res = st.executeQuery("select * from queue;");
 		while (res.next()) {
-			usersQueue.add(res.getLong(1));
+			list.add(res.getLong(1));
 		}
-
+		Collections.shuffle(list);
+		for (int i = 0; i < list.size(); i++) {
+			usersQueue.add(list.get(i));
+		}
+		list.clear();
 		// ============================================
 		BufferedReader tokens = new BufferedReader(new FileReader(new File(
 				"tokens.txt")));
@@ -254,18 +296,6 @@ public class Main_Graph_v2 {
 		}
 	}
 
-	static void printCnt() {
-		while (true) {
-			System.out.println(database_cnt + " " + collected_cnt);
-			try {
-				Thread.sleep(1000);
-			} catch (InterruptedException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
-		}
-	}
-
 	public static void main(String[] args) throws Exception {
 		con = Database.getConnection();
 		st = con.createStatement();
@@ -275,7 +305,12 @@ public class Main_Graph_v2 {
 		Thread printerThread = new Thread(new Runnable() {
 			@Override
 			public void run() {
-				printCnt();
+				try {
+					printCnt();
+				} catch (IOException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
 			}
 		});
 		printerThread.start();
@@ -285,7 +320,7 @@ public class Main_Graph_v2 {
 			public void run() {
 				try {
 					writer();
-				} catch (SQLException | InterruptedException e) {
+				} catch (Exception e) {
 					// TODO Auto-generated catch block
 					e.printStackTrace();
 				}
@@ -325,22 +360,23 @@ public class Main_Graph_v2 {
 		public void run() {
 			while (true) {
 				try {
-					Main_Graph_v2.run(tokenIndex, threadIndex);
+					Main_Graph_v2.fetch(tokenIndex, threadIndex);
 				} catch (TwitterException e) {
-
-					System.out.println("\t\t\t\t\t=======================\t"
-							+ "tokenIndex: " + tokenIndex + "\tthreadIndex: "
-							+ threadIndex + "\t" + e.getErrorMessage());
-
-					if (e.getErrorMessage() == null) {
-						System.out.println("===\t" + e.getLocalizedMessage());
+					// sleep 2 sec on exception
+					try {
+						Thread.sleep(2000);
+					} catch (InterruptedException e1) {
+						// TODO Auto-generated catch block
+						e1.printStackTrace();
 					}
-					// e.printStackTrace();
+
 					if (e.getErrorMessage() != null
 							&& e.getErrorMessage()
 									.equals("Rate limit exceeded")) {
-						freeTokens.add(tokenIndex);
-						tokenIndex = freeTokens.poll();
+						synchronized (freeTokens) {
+							freeTokens.add(tokenIndex);
+							tokenIndex = freeTokens.poll();
+						}
 					}
 				} catch (Exception e) {
 				}

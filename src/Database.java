@@ -1,8 +1,6 @@
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.Statement;
 
 public class Database {
 
@@ -11,7 +9,7 @@ public class Database {
 	static Connection getConnection() throws Exception {
 		if (con == null) {
 			String unicode = "?useServerPrepStmts=false&rewriteBatchedStatements=true";
-			String url = "jdbc:mysql://localhost:3306/mydb";
+			String url = "jdbc:mysql://localhost:3306/twitterdb";
 			String user = "root";
 			String password = "root";
 			con = DriverManager.getConnection(url + unicode, user, password);
@@ -23,7 +21,7 @@ public class Database {
 		Connection con = getConnection();
 		con.setAutoCommit(false);
 		PreparedStatement st = con
-				.prepareStatement("insert into userid value(?)");
+				.prepareStatement("insert into test values(?)");
 		long t1 = System.currentTimeMillis();
 		for (int i = 0; i < 1000; i++) {
 			st.setLong(1, (long) (Math.random() * 1000000000000000000L));
