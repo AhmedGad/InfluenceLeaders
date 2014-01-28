@@ -9,6 +9,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.Arrays;
 
 import twitter4j.IDs;
 import twitter4j.Twitter;
@@ -16,6 +17,7 @@ import twitter4j.TwitterException;
 import twitter4j.TwitterFactory;
 import twitter4j.conf.Configuration;
 import twitter4j.conf.ConfigurationBuilder;
+
 
 public class Main_Graph {
 	// to be computed on runtime
@@ -73,6 +75,7 @@ public class Main_Graph {
 				accesstokens[tokenIndex][1], accesstokens[tokenIndex][2],
 				accesstokens[tokenIndex][3]));
 
+		Arrays.binarySearch(a, key);
 		System.out.println("Token : " + tokenIndex + ", User ID : " + userId + ", Cursor : "
 				+ cursor);
 		IDs list = null;
@@ -234,13 +237,10 @@ public class Main_Graph {
 						pstmt_Queue.executeBatch();
 						pstmt_Graph.executeBatch();
 					}
+
 				}
 
-				// execute commands
-				pstmt_UserId.executeBatch();
-				pstmt_Queue.executeBatch();
-				pstmt_Graph.executeBatch();
-	
+				
 
 				// remove that element from Queue
 				removeQueueElement(u);
