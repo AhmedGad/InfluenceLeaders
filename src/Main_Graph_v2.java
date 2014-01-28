@@ -23,12 +23,11 @@ import twitter4j.conf.Configuration;
 import twitter4j.conf.ConfigurationBuilder;
 
 public class Main_Graph_v2 {
-	private static Configuration getConfiguration(String ConsumerKey,
-			String ConsumerSecret, String AccessToken, String TokenSecret) {
+	private static Configuration getConfiguration(String ConsumerKey, String ConsumerSecret,
+			String AccessToken, String TokenSecret) {
 		ConfigurationBuilder cb = new ConfigurationBuilder();
 		cb.setDebugEnabled(true).setOAuthConsumerKey(ConsumerKey)
-				.setOAuthConsumerSecret(ConsumerSecret)
-				.setOAuthAccessToken(AccessToken)
+				.setOAuthConsumerSecret(ConsumerSecret).setOAuthAccessToken(AccessToken)
 				.setOAuthAccessTokenSecret(TokenSecret);
 		return cb.build();
 	}
@@ -48,11 +47,11 @@ public class Main_Graph_v2 {
 
 	// queue table
 	static Queue<Long> usersQueue;
-	
+
 	// user id not finished yet , not written to database, still in user queue
 	static Queue<Long> unfinished_queue;
 	static HashMap<Long, UserEntry> unfinished_map;
-	
+
 	// ready to be written to graph [user .... followers]
 	static Queue<ArrayList<Long>> graphQueue;
 
@@ -69,6 +68,7 @@ public class Main_Graph_v2 {
 
 	/**
 	 * get new user id from queue
+	 * 
 	 * @return
 	 */
 	static synchronized long pop() {
@@ -89,17 +89,17 @@ public class Main_Graph_v2 {
 	}
 
 	/**
-	 * fetch followers 
+	 * fetch followers
+	 * 
 	 * @param tokenIndex
 	 * @throws TwitterException
 	 * @throws Exception
 	 */
-	public static void fetch(int tokenIndex)
-			throws TwitterException, Exception {
+	public static void fetch(int tokenIndex) throws TwitterException, Exception {
 
-		Twitter twitter = getTwitterInstance(getConfiguration(
-				accesstokens[tokenIndex][0], accesstokens[tokenIndex][1],
-				accesstokens[tokenIndex][2], accesstokens[tokenIndex][3]));
+		Twitter twitter = getTwitterInstance(getConfiguration(accesstokens[tokenIndex][0],
+				accesstokens[tokenIndex][1], accesstokens[tokenIndex][2],
+				accesstokens[tokenIndex][3]));
 
 		long curUser = -1, curCursor = -1;
 		ArrayList<Long> followers = null;
@@ -113,13 +113,13 @@ public class Main_Graph_v2 {
 						UserEntry entry = unfinished_map.remove((Long) curUser);
 						curCursor = entry.cursor;
 						followers = entry.followers;
-					}else{
+					} else {
 						curCursor = -1;
 						followers = new ArrayList<Long>();
 						// user with index = 0 is the followed user
 						followers.add(curUser);
 					}
-					
+
 					userFinished = false;
 					while (true) {
 						IDs res = twitter.getFollowersIDs(curUser, curCursor);
@@ -144,10 +144,10 @@ public class Main_Graph_v2 {
 				}
 			} catch (Exception e) {
 				if (e instanceof TwitterException) {
-					if (((TwitterException) e).getLocalizedMessage()
-							.startsWith("401:Authentication credentials")) {
+					if (((TwitterException) e).getLocalizedMessage().startsWith(
+							"401:Authentication credentials")) {
 						userFinished = true;
-						st.execute("delete from queue where id = " + curUser);
+						st.execute("insert into finished values (" + curUser + ");");
 					}
 				}
 				throw e;
@@ -160,18 +160,12 @@ public class Main_Graph_v2 {
 	}
 
 	@SuppressWarnings("resource")
-	public static void writer() throws SQLException, InterruptedException,
-			IOException {
-		FileWriter logWriter = new FileWriter(new File(("log"
-				+ System.currentTimeMillis() + ".txt")));
-		PreparedStatement userid_insertion = con
-				.prepareStatement("insert into userid values(?)");
+	public static void writer() throws SQLException, InterruptedException, IOException {
+		FileWriter logWriter = new FileWriter(new File(
+				("log" + System.currentTimeMillis() + ".txt")));
+		PreparedStatement userid_insertion = con.prepareStatement("insert into userid values(?)");
 
-		PreparedStatement graph_insertion = con
-				.prepareStatement("insert into graph values(?, ?)");
-
-		PreparedStatement queue_insertion = con
-				.prepareStatement("insert into queue values(?)");
+		PreparedStatement graph_insertion = con.prepareStatement("insert into graph values(?, ?)");
 
 		// I think better commint if windows
 		con.setAutoCommit(false);
@@ -199,16 +193,12 @@ public class Main_Graph_v2 {
 						if (!userId.contains(uid1)) {
 							userid_insertion.setLong(1, uid1);
 							userid_insertion.addBatch();
-							queue_insertion.setLong(1, uid1);
-							queue_insertion.addBatch();
-
 							usersQueue.add(uid1);
 							userId.add(uid1);
 						}
 
 						if ((i % max_batch_size) == 0 || i == cur.size() - 1) {
 							userid_insertion.executeBatch();
-							queue_insertion.executeBatch();
 							graph_insertion.executeBatch();
 
 							con.commit();
@@ -218,17 +208,14 @@ public class Main_Graph_v2 {
 						}
 					}
 
-					st.execute("delete from queue where id = " + uid2);
-					System.out.println("finish writing " + (cur.size() - 1)
-							+ " records in "
-							+ (System.currentTimeMillis() - t1)
-							+ " millis, waited list " + graphQueue.size()
-							+ " user id " + uid2);
-					logWriter.write("finish writing " + (cur.size() - 1)
-							+ " records in "
-							+ (System.currentTimeMillis() - t1)
-							+ " millis, waited list " + graphQueue.size()
-							+ " user id " + uid2 + "\n");
+					st.execute("insert into finished values (" + uid2 + ");");
+
+					System.out.println("finish writing " + (cur.size() - 1) + " records in "
+							+ (System.currentTimeMillis() - t1) + " millis, waited list "
+							+ graphQueue.size() + " user id " + uid2);
+					logWriter.write("finish writing " + (cur.size() - 1) + " records in "
+							+ (System.currentTimeMillis() - t1) + " millis, waited list "
+							+ graphQueue.size() + " user id " + uid2 + "\n");
 					logWriter.flush();
 				} else {
 					Thread.sleep(1000);
@@ -244,21 +231,19 @@ public class Main_Graph_v2 {
 
 	@SuppressWarnings("resource")
 	static void printCnt() throws IOException {
-		FileWriter writer = new FileWriter(new File("counters"
-				+ System.currentTimeMillis() + ".txt"));
+		FileWriter writer = new FileWriter(new File("counters" + System.currentTimeMillis()
+				+ ".txt"));
 		int min = 0;
 		while (true) {
-			System.out.println("\n\nmin: " + min + " written to database, "
-					+ database_cnt + " fetched, " + collected_cnt + " gap, "
-					+ (collected_cnt - database_cnt) + " databas queue size : "
-					+ graphQueue.size() + " total fetched: " + total_fetched
-					+ "\n\n");
+			System.out.println("\n\nmin: " + min + " written to database, " + database_cnt
+					+ " fetched, " + collected_cnt + " gap, " + (collected_cnt - database_cnt)
+					+ " databas queue size : " + graphQueue.size() + " total fetched: "
+					+ total_fetched + "\n\n");
 
-			writer.write("min: " + min++ + " written to database, "
-					+ database_cnt + " fetched, " + collected_cnt + " gap, "
-					+ (collected_cnt - database_cnt) + " databas queue size : "
-					+ graphQueue.size() + " total fetched: " + total_fetched
-					+ "\n");
+			writer.write("min: " + min++ + " written to database, " + database_cnt + " fetched, "
+					+ collected_cnt + " gap, " + (collected_cnt - database_cnt)
+					+ " databas queue size : " + graphQueue.size() + " total fetched: "
+					+ total_fetched + "\n");
 			writer.flush();
 			try {
 				Thread.sleep(60000);
@@ -276,25 +261,29 @@ public class Main_Graph_v2 {
 		unfinished_map = new HashMap<Long, UserEntry>();
 		userId = new TreeSet<Long>();
 
-		ResultSet res = st.executeQuery("select * from userid;");
+		System.out.println("Start");
+		TreeSet<Long> finished = new TreeSet<Long>();
+		ResultSet res = st.executeQuery("select * from finished;");
+		while (res.next()) {
+			finished.add(res.getLong(1));
+		}
+		
+		System.out.println("Finish Loading finish table");
+		
+		res = st.executeQuery("select * from userid;");
+		System.out.println("user id");
+		
 		while (res.next()) {
 			userId.add(res.getLong(1));
+			long k = res.getLong(1);
+			if (!finished.contains(k))
+				usersQueue.add(k);
 		}
-
-		ArrayList<Long> list = new ArrayList<Long>();
 		
-		res = st.executeQuery("select * from queue;");
-		while (res.next()) {
-			list.add(res.getLong(1));
-		}
-		Collections.shuffle(list);
-		for (int i = 0; i < list.size(); i++) {
-			usersQueue.add(list.get(i));
-		}
-		list.clear();
+		System.out.println("Finished Loading ALL");
+		finished.clear();
 		// ============================================
-		BufferedReader tokens = new BufferedReader(new FileReader(new File(
-				"tokens.txt")));
+		BufferedReader tokens = new BufferedReader(new FileReader(new File("tokens.txt")));
 
 		while (tokens.ready()) {
 			tokens.readLine();
@@ -391,8 +380,7 @@ public class Main_Graph_v2 {
 					}
 
 					if (e.getErrorMessage() != null
-							&& e.getErrorMessage()
-									.equals("Rate limit exceeded")) {
+							&& e.getErrorMessage().equals("Rate limit exceeded")) {
 						synchronized (freeTokens) {
 							freeTokens.add(tokenIndex);
 							tokenIndex = freeTokens.poll();
