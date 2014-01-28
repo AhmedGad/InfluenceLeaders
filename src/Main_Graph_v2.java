@@ -46,20 +46,31 @@ public class Main_Graph_v2 {
 	static Connection con;
 	static Statement st;
 
+	// queue table
 	static Queue<Long> usersQueue;
+	
+	// user id not finished yet , not written to database, still in user queue
 	static Queue<Long> unfinished_queue;
 	static HashMap<Long, UserEntry> unfinished_map;
+	
+	// ready to be written to graph [user .... followers]
+	static Queue<ArrayList<Long>> graphQueue;
 
+	// table user id
 	static TreeSet<Long> userId;
 
 	static int max_batch_size = 100000;
+
 	static int database_cnt = 0;
 	private static int collected_cnt = 0;
 	private static int total_fetched = 0;
 
-	static Queue<ArrayList<Long>> graphQueue;
 	private static int threadNum = 30;
 
+	/**
+	 * get new user id from queue
+	 * @return
+	 */
 	static synchronized long pop() {
 		// check unfinished first
 		if (!unfinished_queue.isEmpty())
@@ -77,7 +88,13 @@ public class Main_Graph_v2 {
 
 	}
 
-	public static void fetch(int tokenIndex, int threadIndex)
+	/**
+	 * fetch followers 
+	 * @param tokenIndex
+	 * @throws TwitterException
+	 * @throws Exception
+	 */
+	public static void fetch(int tokenIndex)
 			throws TwitterException, Exception {
 
 		Twitter twitter = getTwitterInstance(getConfiguration(
@@ -86,7 +103,7 @@ public class Main_Graph_v2 {
 
 		long curUser = -1, curCursor = -1;
 		ArrayList<Long> followers = null;
-		boolean userOk = true;
+		boolean userFinished = true;
 
 		while (true) {
 			try {
@@ -96,11 +113,14 @@ public class Main_Graph_v2 {
 						UserEntry entry = unfinished_map.remove((Long) curUser);
 						curCursor = entry.cursor;
 						followers = entry.followers;
+					}else{
+						curCursor = -1;
+						followers = new ArrayList<Long>();
+						// user with index = 0 is the followed user
+						followers.add(curUser);
 					}
-					userOk = false;
-					followers = new ArrayList<Long>();
-					// user with index = 0 is the followed user
-					followers.add(curUser);
+					
+					userFinished = false;
 					while (true) {
 						IDs res = twitter.getFollowersIDs(curUser, curCursor);
 						long[] followers_ar = res.getIDs();
@@ -113,7 +133,7 @@ public class Main_Graph_v2 {
 						if (!res.hasNext()) {
 							graphQueue.add(followers);
 							collected_cnt += followers.size() - 1;
-							userOk = true;
+							userFinished = true;
 							curCursor = -1;
 							break;
 						}
@@ -126,13 +146,13 @@ public class Main_Graph_v2 {
 				if (e instanceof TwitterException) {
 					if (((TwitterException) e).getLocalizedMessage()
 							.startsWith("401:Authentication credentials")) {
-						userOk = true;
+						userFinished = true;
 						st.execute("delete from queue where id = " + curUser);
 					}
 				}
 				throw e;
 			} finally {
-				if (!userOk) {
+				if (!userFinished) {
 					add_unfinished_user_entry(curUser, curCursor, followers);
 				}
 			}
@@ -228,7 +248,7 @@ public class Main_Graph_v2 {
 				+ System.currentTimeMillis() + ".txt"));
 		int min = 0;
 		while (true) {
-			System.out.println("\n\nmin: " + min++ + " written to database, "
+			System.out.println("\n\nmin: " + min + " written to database, "
 					+ database_cnt + " fetched, " + collected_cnt + " gap, "
 					+ (collected_cnt - database_cnt) + " databas queue size : "
 					+ graphQueue.size() + " total fetched: " + total_fetched
@@ -250,7 +270,7 @@ public class Main_Graph_v2 {
 	}
 
 	private static void init() throws SQLException, Exception {
-		graphQueue = new ArrayDeque<>();
+		graphQueue = new ArrayDeque<ArrayList<Long>>();
 		usersQueue = new ArrayDeque<Long>();
 		unfinished_queue = new ArrayDeque<Long>();
 		unfinished_map = new HashMap<Long, UserEntry>();
@@ -360,7 +380,7 @@ public class Main_Graph_v2 {
 		public void run() {
 			while (true) {
 				try {
-					Main_Graph_v2.fetch(tokenIndex, threadIndex);
+					Main_Graph_v2.fetch(tokenIndex);
 				} catch (TwitterException e) {
 					// sleep 2 sec on exception
 					try {
