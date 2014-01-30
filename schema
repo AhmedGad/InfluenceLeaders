@@ -11,6 +11,10 @@ create table finished (
     id BigInt
 );
 
+create table finished2 (
+    id BigInt
+);
+
 
 delete from userid;
 delete from finished;

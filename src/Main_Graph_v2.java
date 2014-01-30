@@ -40,6 +40,7 @@ public class Main_Graph_v2 {
 	// to be computed on runtime
 	static int totalTokens = 0, flushLimit = 1000;
 	static Queue<Integer> freeTokens = new ArrayDeque<Integer>();
+	static Queue<Integer> freeTokens2 = new ArrayDeque<Integer>();
 
 	static String accesstokens[][];
 
@@ -49,6 +50,9 @@ public class Main_Graph_v2 {
 	// user id not finished yet , not written to database, still in user queue
 	static Queue<Long> unfinished_queue;
 	static HashMap<Long, UserEntry> unfinished_map;
+
+	static Queue<Long> unfinished_queue2;
+	static HashMap<Long, UserEntry> unfinished_map2;
 
 	// ready to be written to graph [user .... followers]
 	static Queue<MyArrayList> graphQueue;
@@ -62,11 +66,15 @@ public class Main_Graph_v2 {
 
 	static int database_cnt = 0;
 	private static int collected_cnt = 0;
+	private static int collected_cnt2 = 0;
+
 	private static int total_fetched = 0;
+	private static int total_fetched2 = 0;
 
 	private static int threadNum = 30;
 
 	private static BufferedReader queueReader;
+	private static BufferedReader queueReader2;
 
 	/**
 	 * get new user id from queue
@@ -74,12 +82,23 @@ public class Main_Graph_v2 {
 	 * @return
 	 * @throws IOException
 	 */
-	static synchronized long pop() throws IOException {
-		// check unfinished first
-		if (!unfinished_queue.isEmpty())
-			return unfinished_queue.poll();
+	static synchronized long pop(boolean fetchFollowers) throws IOException {
+		String id = null;
 
-		String id = queueReader.readLine();
+		if (fetchFollowers) {
+			// check unfinished first
+			if (!unfinished_queue.isEmpty())
+				return unfinished_queue.poll();
+
+			id = queueReader.readLine();
+		} else {
+			// check unfinished first
+			if (!unfinished_queue2.isEmpty())
+				return unfinished_queue2.poll();
+
+			id = queueReader2.readLine();
+		}
+
 		if (id == null)
 			return -1;
 
@@ -87,10 +106,26 @@ public class Main_Graph_v2 {
 	}
 
 	static synchronized void add_unfinished_user_entry(long uid, long cursor,
-			MyArrayList followers) {
-		unfinished_queue.add(uid);
-		unfinished_map.put(uid, new UserEntry(cursor, followers));
+			MyArrayList followers, boolean fetchFollowers) {
+		if (fetchFollowers) {
+			unfinished_queue.add(uid);
+			unfinished_map.put(uid, new UserEntry(cursor, followers));
+		} else {
+			unfinished_queue2.add(uid);
+			unfinished_map2.put(uid, new UserEntry(cursor, followers));
+		}
+	}
 
+	static synchronized UserEntry getEntry(long curUser, boolean fetchFollowers) {
+		UserEntry entry = fetchFollowers ? unfinished_map
+				.remove((Long) curUser) : unfinished_map2
+				.remove((Long) curUser);
+		if (entry == null) {
+			MyArrayList list = new MyArrayList(fetchFollowers);
+			entry = new UserEntry(-1, list);
+			list.add(curUser);
+		}
+		return entry;
 	}
 
 	/**
@@ -100,7 +135,8 @@ public class Main_Graph_v2 {
 	 * @throws TwitterException
 	 * @throws Exception
 	 */
-	public static void fetch(int tokenIndex) throws TwitterException, Exception {
+	public static void fetch(int tokenIndex, boolean fetchFollowers)
+			throws TwitterException, Exception {
 
 		Twitter twitter = getTwitterInstance(getConfiguration(
 				accesstokens[tokenIndex][0], accesstokens[tokenIndex][1],
@@ -113,31 +149,37 @@ public class Main_Graph_v2 {
 		while (true) {
 			try {
 				// pick user from the queue
-				if ((curUser = pop()) > -1) {
-					if (unfinished_map.containsKey((Long) curUser)) {
-						UserEntry entry = unfinished_map.remove((Long) curUser);
-						curCursor = entry.cursor;
-						followers = entry.followers;
-					} else {
-						curCursor = -1;
-						followers = new MyArrayList();
-						// user with index = 0 is the followed user
-						followers.add(curUser);
-					}
+				if ((curUser = pop(fetchFollowers)) > -1) {
+					UserEntry entry = getEntry(curUser, fetchFollowers);
+					curCursor = entry.cursor;
+					followers = entry.followers;
 
 					userFinished = false;
 					while (true) {
-						IDs res = twitter.getFollowersIDs(curUser, curCursor);
+						IDs res = null;
+						if (fetchFollowers)
+							res = twitter.getFollowersIDs(curUser, curCursor);
+						else
+							res = twitter.getFriendsIDs(curUser, curCursor);
+
 						long[] followers_ar = res.getIDs();
 						curCursor = res.getNextCursor();
 						for (int i = 0; i < followers_ar.length; i++)
 							followers.add(followers_ar[i]);
 
-						total_fetched += followers_ar.length;
+						if (fetchFollowers)
+							total_fetched += followers_ar.length;
+						else
+							total_fetched2 += followers_ar.length;
 
 						if (!res.hasNext()) {
 							graphQueue.add(followers);
-							collected_cnt += followers.size() - 1;
+
+							if (fetchFollowers)
+								collected_cnt += followers.size() - 1;
+							else
+								collected_cnt2 += followers.size() - 1;
+
 							userFinished = true;
 							curCursor = -1;
 							break;
@@ -153,7 +195,12 @@ public class Main_Graph_v2 {
 						|| e.getLocalizedMessage().startsWith(
 								"404:The URI requested is invalid")) {
 					userFinished = true;
-					st.execute("insert into finished values (" + curUser + ");");
+					if (fetchFollowers)
+						st.execute("insert into finished values (" + curUser
+								+ ");");
+					else
+						st.execute("insert into finished2 values (" + curUser
+								+ ");");
 				}
 				synchronized (errorLog) {
 					try {
@@ -170,7 +217,8 @@ public class Main_Graph_v2 {
 				throw e;
 			} finally {
 				if (!userFinished) {
-					add_unfinished_user_entry(curUser, curCursor, followers);
+					add_unfinished_user_entry(curUser, curCursor, followers,
+							fetchFollowers);
 				}
 			}
 		}
@@ -206,8 +254,13 @@ public class Main_Graph_v2 {
 					long t1 = System.currentTimeMillis();
 					for (int i = 1; i < cur.size(); i++) {
 						uid1 = cur.get(i);
-						graph_insertion.setLong(1, uid1);
-						graph_insertion.setLong(2, uid2);
+						if (cur.isFollowers) {
+							graph_insertion.setLong(1, uid1);
+							graph_insertion.setLong(2, uid2);
+						} else {
+							graph_insertion.setLong(1, uid2);
+							graph_insertion.setLong(2, uid1);
+						}
 						graph_insertion.addBatch();
 
 						boolean insert = false;
@@ -236,19 +289,27 @@ public class Main_Graph_v2 {
 							last = i;
 						}
 					}
+					if (cur.isFollowers)
+						st.execute("insert into finished values (" + uid2
+								+ ");");
+					else
+						st.execute("insert into finished2 values (" + uid2
+								+ ");");
 
-					st.execute("insert into finished values (" + uid2 + ");");
-
-					System.out.println("finish writing " + (cur.size() - 1)
+					System.out.println((cur.isFollowers ? "" : "\t\t")
+							+ "finish writing " + (cur.size() - 1)
 							+ " records in "
 							+ (System.currentTimeMillis() - t1)
 							+ " millis, waited list " + graphQueue.size()
 							+ " user id " + uid2);
-					logWriter.write("finish writing " + (cur.size() - 1)
+
+					logWriter.write((cur.isFollowers ? "" : "\t\t")
+							+ "finish writing " + (cur.size() - 1)
 							+ " records in "
 							+ (System.currentTimeMillis() - t1)
 							+ " millis, waited list " + graphQueue.size()
 							+ " user id " + uid2 + "\n");
+
 					logWriter.flush();
 				} else {
 					Thread.sleep(1000);
@@ -268,17 +329,25 @@ public class Main_Graph_v2 {
 				+ System.currentTimeMillis() + ".txt"));
 		int min = 0;
 		while (true) {
+
 			System.out.println("\n\nmin: " + min + " written to database, "
-					+ database_cnt + " fetched, " + collected_cnt + " gap, "
-					+ (collected_cnt - database_cnt) + " databas queue size : "
-					+ graphQueue.size() + " total fetched: " + total_fetched
-					+ "\n\n");
+					+ database_cnt + " ,fetched1: " + collected_cnt
+					+ " ,fetched2: " + collected_cnt2 + " ,gap: "
+					+ (collected_cnt + collected_cnt2 - database_cnt)
+					+ " ,databas queue size : " + graphQueue.size()
+					+ " ,total fetched1: " + total_fetched
+					+ " ,total fetched2: " + total_fetched2 + " ,sum: "
+					+ (total_fetched + total_fetched2) + "\n\n");
 
 			writer.write("min: " + min++ + " written to database, "
-					+ database_cnt + " fetched, " + collected_cnt + " gap, "
-					+ (collected_cnt - database_cnt) + " databas queue size : "
-					+ graphQueue.size() + " total fetched: " + total_fetched
-					+ "\n");
+					+ database_cnt + " ,fetched1: " + collected_cnt
+					+ " ,fetched2: " + collected_cnt2 + " ,gap: "
+					+ (collected_cnt + collected_cnt2 - database_cnt)
+					+ " ,databas queue size : " + graphQueue.size()
+					+ " ,total fetched1: " + total_fetched
+					+ " ,total fetched2: " + total_fetched2 + " ,sum: "
+					+ (total_fetched + total_fetched2) + "\n");
+
 			writer.flush();
 			try {
 				Thread.sleep(60000);
@@ -296,12 +365,21 @@ public class Main_Graph_v2 {
 		userId2 = new TreeSet<Long>();
 
 		FileWriter usersQueue = new FileWriter("queue.txt");
+		FileWriter usersQueue2 = new FileWriter("queue2.txt");
 
 		System.out.println("Start");
+
 		HashSet<Long> finished = new HashSet<Long>();
+		HashSet<Long> finished2 = new HashSet<Long>();
+
 		ResultSet res = st.executeQuery("select * from finished;");
 		while (res.next()) {
 			finished.add(res.getLong(1));
+		}
+
+		res = st.executeQuery("select * from finished2;");
+		while (res.next()) {
+			finished2.add(res.getLong(1));
 		}
 
 		System.out.println("Finish Loading finish table");
@@ -325,15 +403,21 @@ public class Main_Graph_v2 {
 					userId[(int) (id / 64)] |= (1L << (id % 64));
 				if (!finished.contains(id))
 					usersQueue.write(id + "\n");
+				if (!finished2.contains(id))
+					usersQueue2.write(id + "\n");
 			}
 			System.out.println("!!!");
 		}
 		System.out.println("finished");
 		usersQueue.flush();
+		usersQueue2.flush();
 		usersQueue.close();
+		usersQueue2.close();
 		System.gc();
 
 		queueReader = new BufferedReader(new FileReader(new File("queue.txt")));
+		queueReader2 = new BufferedReader(
+				new FileReader(new File("queue2.txt")));
 
 		System.out.println("Finished Loading ALL");
 		finished.clear();
@@ -399,24 +483,30 @@ public class Main_Graph_v2 {
 
 		int curTokenNumber = 0;
 		for (int i = 0; i < threadNum; i++) {
-			new Thread(new MyThread(curTokenNumber++, i)).start();
+			new Thread(new MyThread(curTokenNumber, i, i % 2 == 0)).start();
+			if (i % 2 == 1)
+				curTokenNumber++;
 		}
 
 		for (int i = curTokenNumber; i < totalTokens; i++) {
 			freeTokens.add(i);
+			freeTokens2.add(i);
 		}
 	}
 
 	static class MyArrayList {
+		boolean isFollowers;
+
 		private ArrayList<long[]> list;
 		private int listIndx, arrIndx;
 		private final int len = 5000;
 
-		public MyArrayList() {
+		public MyArrayList(boolean followers) {
 			list = new ArrayList<long[]>();
 			list.add(new long[len]);
 			listIndx = 0;
 			arrIndx = 0;
+			isFollowers = followers;
 		}
 
 		void add(long n) {
@@ -450,17 +540,19 @@ public class Main_Graph_v2 {
 
 	static class MyThread implements Runnable {
 		int tokenIndex, threadIndex;
+		boolean fetchFollowers;
 
-		public MyThread(int tokenIndex, int threadIndex) {
+		public MyThread(int tokenIndex, int threadIndex, boolean fetchFollowers) {
 			this.tokenIndex = tokenIndex;
 			this.threadIndex = threadIndex;
+			this.fetchFollowers = fetchFollowers;
 		}
 
 		@Override
 		public void run() {
 			while (true) {
 				try {
-					Main_Graph_v2.fetch(tokenIndex);
+					Main_Graph_v2.fetch(tokenIndex, fetchFollowers);
 				} catch (TwitterException e) {
 					// sleep 2 sec on exception
 					try {
@@ -473,10 +565,16 @@ public class Main_Graph_v2 {
 					if (e.getErrorMessage() != null
 							&& e.getErrorMessage()
 									.equals("Rate limit exceeded")) {
-						synchronized (freeTokens) {
-							freeTokens.add(tokenIndex);
-							tokenIndex = freeTokens.poll();
-						}
+						if (fetchFollowers)
+							synchronized (freeTokens) {
+								freeTokens.add(tokenIndex);
+								tokenIndex = freeTokens.poll();
+							}
+						else
+							synchronized (freeTokens2) {
+								freeTokens2.add(tokenIndex);
+								tokenIndex = freeTokens2.poll();
+							}
 					}
 				} catch (Exception e) {
 				}
