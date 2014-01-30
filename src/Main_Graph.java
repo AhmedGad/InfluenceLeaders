@@ -75,7 +75,6 @@ public class Main_Graph {
 				accesstokens[tokenIndex][1], accesstokens[tokenIndex][2],
 				accesstokens[tokenIndex][3]));
 
-		Arrays.binarySearch(a, key);
 		System.out.println("Token : " + tokenIndex + ", User ID : " + userId + ", Cursor : "
 				+ cursor);
 		IDs list = null;

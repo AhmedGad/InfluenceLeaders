@@ -10,7 +10,6 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Queue;
 import java.util.TreeSet;
@@ -23,11 +22,12 @@ import twitter4j.conf.Configuration;
 import twitter4j.conf.ConfigurationBuilder;
 
 public class Main_Graph_v2 {
-	private static Configuration getConfiguration(String ConsumerKey, String ConsumerSecret,
-			String AccessToken, String TokenSecret) {
+	private static Configuration getConfiguration(String ConsumerKey,
+			String ConsumerSecret, String AccessToken, String TokenSecret) {
 		ConfigurationBuilder cb = new ConfigurationBuilder();
 		cb.setDebugEnabled(true).setOAuthConsumerKey(ConsumerKey)
-				.setOAuthConsumerSecret(ConsumerSecret).setOAuthAccessToken(AccessToken)
+				.setOAuthConsumerSecret(ConsumerSecret)
+				.setOAuthAccessToken(AccessToken)
 				.setOAuthAccessTokenSecret(TokenSecret);
 		return cb.build();
 	}
@@ -45,18 +45,17 @@ public class Main_Graph_v2 {
 	static Connection con;
 	static Statement st;
 
-	// queue table
-	static Queue<Long> usersQueue;
-
 	// user id not finished yet , not written to database, still in user queue
 	static Queue<Long> unfinished_queue;
 	static HashMap<Long, UserEntry> unfinished_map;
 
 	// ready to be written to graph [user .... followers]
-	static Queue<ArrayList<Long>> graphQueue;
+	static Queue<MyArrayList> graphQueue;
 
 	// table user id
-	static TreeSet<Long> userId;
+	static long maxId = 3000000000L;
+	static long[] userId = new long[(int) (maxId / 64L)];
+	static TreeSet<Long> userId2;
 
 	static int max_batch_size = 100000;
 
@@ -66,23 +65,28 @@ public class Main_Graph_v2 {
 
 	private static int threadNum = 30;
 
+	private static BufferedReader queueReader;
+
 	/**
 	 * get new user id from queue
 	 * 
 	 * @return
+	 * @throws IOException
 	 */
-	static synchronized long pop() {
+	static synchronized long pop() throws IOException {
 		// check unfinished first
 		if (!unfinished_queue.isEmpty())
 			return unfinished_queue.poll();
 
-		if (usersQueue.isEmpty())
+		String id = queueReader.readLine();
+		if (id == null)
 			return -1;
-		return usersQueue.poll();
+
+		return new Long(id);
 	}
 
 	static synchronized void add_unfinished_user_entry(long uid, long cursor,
-			ArrayList<Long> followers) {
+			MyArrayList followers) {
 		unfinished_queue.add(uid);
 		unfinished_map.put(uid, new UserEntry(cursor, followers));
 
@@ -97,12 +101,12 @@ public class Main_Graph_v2 {
 	 */
 	public static void fetch(int tokenIndex) throws TwitterException, Exception {
 
-		Twitter twitter = getTwitterInstance(getConfiguration(accesstokens[tokenIndex][0],
-				accesstokens[tokenIndex][1], accesstokens[tokenIndex][2],
-				accesstokens[tokenIndex][3]));
+		Twitter twitter = getTwitterInstance(getConfiguration(
+				accesstokens[tokenIndex][0], accesstokens[tokenIndex][1],
+				accesstokens[tokenIndex][2], accesstokens[tokenIndex][3]));
 
 		long curUser = -1, curCursor = -1;
-		ArrayList<Long> followers = null;
+		MyArrayList followers = null;
 		boolean userFinished = true;
 
 		while (true) {
@@ -115,7 +119,7 @@ public class Main_Graph_v2 {
 						followers = entry.followers;
 					} else {
 						curCursor = -1;
-						followers = new ArrayList<Long>();
+						followers = new MyArrayList();
 						// user with index = 0 is the followed user
 						followers.add(curUser);
 					}
@@ -144,10 +148,11 @@ public class Main_Graph_v2 {
 				}
 			} catch (Exception e) {
 				if (e instanceof TwitterException) {
-					if (((TwitterException) e).getLocalizedMessage().startsWith(
-							"401:Authentication credentials")) {
+					if (((TwitterException) e).getLocalizedMessage()
+							.startsWith("401:Authentication credentials")) {
 						userFinished = true;
-						st.execute("insert into finished values (" + curUser + ");");
+						st.execute("insert into finished values (" + curUser
+								+ ");");
 					}
 				}
 				throw e;
@@ -160,17 +165,20 @@ public class Main_Graph_v2 {
 	}
 
 	@SuppressWarnings("resource")
-	public static void writer() throws SQLException, InterruptedException, IOException {
-		FileWriter logWriter = new FileWriter(new File(
-				("log" + System.currentTimeMillis() + ".txt")));
-		PreparedStatement userid_insertion = con.prepareStatement("insert into userid values(?)");
+	public static void writer() throws SQLException, InterruptedException,
+			IOException {
+		FileWriter logWriter = new FileWriter(new File(("log"
+				+ System.currentTimeMillis() + ".txt")));
+		PreparedStatement userid_insertion = con
+				.prepareStatement("insert into userid values(?)");
 
-		PreparedStatement graph_insertion = con.prepareStatement("insert into graph values(?, ?)");
+		PreparedStatement graph_insertion = con
+				.prepareStatement("insert into graph values(?, ?)");
 
 		// I think better commint if windows
 		con.setAutoCommit(false);
 
-		ArrayList<Long> cur = null;
+		MyArrayList cur = null;
 
 		while (true) {
 			try {
@@ -190,11 +198,20 @@ public class Main_Graph_v2 {
 						graph_insertion.setLong(2, uid2);
 						graph_insertion.addBatch();
 
-						if (!userId.contains(uid1)) {
+						boolean insert = false;
+						if (uid1 >= maxId) {
+							if (!userId2.contains((Long) uid1)) {
+								insert = true;
+								userId2.add(uid1);
+							}
+						} else if ((userId[(int) (uid1 / 64)] & (1L << (uid1 % 64))) == 0) {
+							insert = true;
+							userId[(int) (uid1 / 64)] |= (1L << (uid1 % 64));
+						}
+
+						if (insert) {
 							userid_insertion.setLong(1, uid1);
 							userid_insertion.addBatch();
-							usersQueue.add(uid1);
-							userId.add(uid1);
 						}
 
 						if ((i % max_batch_size) == 0 || i == cur.size() - 1) {
@@ -210,12 +227,16 @@ public class Main_Graph_v2 {
 
 					st.execute("insert into finished values (" + uid2 + ");");
 
-					System.out.println("finish writing " + (cur.size() - 1) + " records in "
-							+ (System.currentTimeMillis() - t1) + " millis, waited list "
-							+ graphQueue.size() + " user id " + uid2);
-					logWriter.write("finish writing " + (cur.size() - 1) + " records in "
-							+ (System.currentTimeMillis() - t1) + " millis, waited list "
-							+ graphQueue.size() + " user id " + uid2 + "\n");
+					System.out.println("finish writing " + (cur.size() - 1)
+							+ " records in "
+							+ (System.currentTimeMillis() - t1)
+							+ " millis, waited list " + graphQueue.size()
+							+ " user id " + uid2);
+					logWriter.write("finish writing " + (cur.size() - 1)
+							+ " records in "
+							+ (System.currentTimeMillis() - t1)
+							+ " millis, waited list " + graphQueue.size()
+							+ " user id " + uid2 + "\n");
 					logWriter.flush();
 				} else {
 					Thread.sleep(1000);
@@ -231,19 +252,21 @@ public class Main_Graph_v2 {
 
 	@SuppressWarnings("resource")
 	static void printCnt() throws IOException {
-		FileWriter writer = new FileWriter(new File("counters" + System.currentTimeMillis()
-				+ ".txt"));
+		FileWriter writer = new FileWriter(new File("counters"
+				+ System.currentTimeMillis() + ".txt"));
 		int min = 0;
 		while (true) {
-			System.out.println("\n\nmin: " + min + " written to database, " + database_cnt
-					+ " fetched, " + collected_cnt + " gap, " + (collected_cnt - database_cnt)
-					+ " databas queue size : " + graphQueue.size() + " total fetched: "
-					+ total_fetched + "\n\n");
+			System.out.println("\n\nmin: " + min + " written to database, "
+					+ database_cnt + " fetched, " + collected_cnt + " gap, "
+					+ (collected_cnt - database_cnt) + " databas queue size : "
+					+ graphQueue.size() + " total fetched: " + total_fetched
+					+ "\n\n");
 
-			writer.write("min: " + min++ + " written to database, " + database_cnt + " fetched, "
-					+ collected_cnt + " gap, " + (collected_cnt - database_cnt)
-					+ " databas queue size : " + graphQueue.size() + " total fetched: "
-					+ total_fetched + "\n");
+			writer.write("min: " + min++ + " written to database, "
+					+ database_cnt + " fetched, " + collected_cnt + " gap, "
+					+ (collected_cnt - database_cnt) + " databas queue size : "
+					+ graphQueue.size() + " total fetched: " + total_fetched
+					+ "\n");
 			writer.flush();
 			try {
 				Thread.sleep(60000);
@@ -255,11 +278,12 @@ public class Main_Graph_v2 {
 	}
 
 	private static void init() throws SQLException, Exception {
-		graphQueue = new ArrayDeque<ArrayList<Long>>();
-		usersQueue = new ArrayDeque<Long>();
+		graphQueue = new ArrayDeque<MyArrayList>();
 		unfinished_queue = new ArrayDeque<Long>();
 		unfinished_map = new HashMap<Long, UserEntry>();
-		userId = new TreeSet<Long>();
+		userId2 = new TreeSet<Long>();
+
+		FileWriter usersQueue = new FileWriter("queue.txt");
 
 		System.out.println("Start");
 		TreeSet<Long> finished = new TreeSet<Long>();
@@ -267,23 +291,42 @@ public class Main_Graph_v2 {
 		while (res.next()) {
 			finished.add(res.getLong(1));
 		}
-		
+
 		System.out.println("Finish Loading finish table");
-		
-		res = st.executeQuery("select * from userid;");
-		System.out.println("user id");
-		
-		while (res.next()) {
-			userId.add(res.getLong(1));
-			long k = res.getLong(1);
-			if (!finished.contains(k))
-				usersQueue.add(k);
+
+		int start = 0, step = 5000000;
+		boolean notFinished = true;
+		while (notFinished) {
+
+			res = st.executeQuery("select * from userid limit " + start + ","
+					+ step + ";");
+			start += step;
+			notFinished = false;
+			System.out.println("user id loaded: " + start);
+
+			while (res.next()) {
+				notFinished = true;
+				long id = res.getLong(1);
+				if (id >= maxId)
+					userId2.add(res.getLong(1));
+				else
+					userId[(int) (id / 64)] |= (1L << (id % 64));
+				if (!finished.contains(id))
+					usersQueue.write(id + "\n");
+			}
+			System.out.println("!!!");
 		}
-		
+		System.out.println("finished");
+		usersQueue.flush();
+		usersQueue.close();
+
+		queueReader = new BufferedReader(new FileReader(new File("queue.txt")));
+
 		System.out.println("Finished Loading ALL");
 		finished.clear();
 		// ============================================
-		BufferedReader tokens = new BufferedReader(new FileReader(new File("tokens.txt")));
+		BufferedReader tokens = new BufferedReader(new FileReader(new File(
+				"tokens.txt")));
 
 		while (tokens.ready()) {
 			tokens.readLine();
@@ -347,11 +390,42 @@ public class Main_Graph_v2 {
 		}
 	}
 
+	static class MyArrayList {
+		private ArrayList<long[]> list;
+		private int listIndx, arrIndx;
+		private final int len = 5000;
+
+		public MyArrayList() {
+			list = new ArrayList<long[]>();
+			list.add(new long[len]);
+			listIndx = 0;
+			arrIndx = 0;
+		}
+
+		void add(long n) {
+			if (arrIndx == len) {
+				arrIndx = 0;
+				listIndx++;
+				list.add(new long[len]);
+			}
+			list.get(listIndx)[arrIndx] = n;
+			arrIndx++;
+		}
+
+		long get(int i) {
+			return list.get(i / len)[i % len];
+		}
+
+		int size() {
+			return listIndx * len + arrIndx;
+		}
+	}
+
 	static class UserEntry {
 		long cursor;
-		ArrayList<Long> followers;
+		MyArrayList followers;
 
-		public UserEntry(long cursor, ArrayList<Long> followers) {
+		public UserEntry(long cursor, MyArrayList followers) {
 			this.cursor = cursor;
 			this.followers = followers;
 		}
@@ -380,7 +454,8 @@ public class Main_Graph_v2 {
 					}
 
 					if (e.getErrorMessage() != null
-							&& e.getErrorMessage().equals("Rate limit exceeded")) {
+							&& e.getErrorMessage()
+									.equals("Rate limit exceeded")) {
 						synchronized (freeTokens) {
 							freeTokens.add(tokenIndex);
 							tokenIndex = freeTokens.poll();

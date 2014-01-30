@@ -1,6 +1,7 @@
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
+import java.sql.Statement;
 
 public class Database {
 
@@ -19,18 +20,19 @@ public class Database {
 
 	public static void main(String[] args) throws Exception {
 		Connection con = getConnection();
-		con.setAutoCommit(false);
-		PreparedStatement st = con
-				.prepareStatement("insert into test values(?)");
+		Statement st = con.createStatement();
+		boolean ok = false;
+		int start = 0, step = 5000000;
 		long t1 = System.currentTimeMillis();
-		for (int i = 0; i < 1000; i++) {
-			st.setLong(1, (long) (Math.random() * 1000000000000000000L));
-			st.addBatch();
+		while (!ok) {
+			st.executeQuery("select * from userid limit " + start + "," + step
+					+ ";");
+			start += step;
+			System.out.println("curr: " + start);
+			if (start == 10000000) {
+				System.out.println((System.currentTimeMillis() - t1) / 1000);
+				break;
+			}
 		}
-		System.out.println(System.currentTimeMillis() - t1);
-		t1 = System.currentTimeMillis();
-		st.executeBatch();
-		System.out.println(System.currentTimeMillis() - t1);
-		con.commit();
 	}
 }
