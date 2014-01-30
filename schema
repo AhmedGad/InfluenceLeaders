@@ -16,8 +16,4 @@ create table finished2 (
 );
 
 
-delete from userid;
-delete from finished;
-delete from graph;
-
 insert into userid value(280089745);

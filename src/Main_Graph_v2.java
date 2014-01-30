@@ -71,7 +71,7 @@ public class Main_Graph_v2 {
 	private static int total_fetched = 0;
 	private static int total_fetched2 = 0;
 
-	private static int threadNum = 30;
+	private static int threadNum = 60;
 
 	private static BufferedReader queueReader;
 	private static BufferedReader queueReader2;
@@ -205,6 +205,7 @@ public class Main_Graph_v2 {
 				synchronized (errorLog) {
 					try {
 						errorLog.write("token: " + tokenIndex
+								+ "\tfetch followers: " + fetchFollowers
 								+ "\terror message: " + e.getErrorMessage()
 								+ "\tlocalized message: "
 								+ e.getLocalizedMessage() + "\tuser id: "
@@ -360,8 +361,13 @@ public class Main_Graph_v2 {
 
 	private static void init() throws SQLException, Exception {
 		graphQueue = new ArrayDeque<MyArrayList>();
+
 		unfinished_queue = new ArrayDeque<Long>();
 		unfinished_map = new HashMap<Long, UserEntry>();
+
+		unfinished_queue2 = new ArrayDeque<Long>();
+		unfinished_map2 = new HashMap<Long, UserEntry>();
+
 		userId2 = new TreeSet<Long>();
 
 		FileWriter usersQueue = new FileWriter("queue.txt");
