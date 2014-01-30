@@ -11,6 +11,7 @@ import java.sql.Statement;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Queue;
 import java.util.TreeSet;
 
@@ -146,13 +147,24 @@ public class Main_Graph_v2 {
 					// if users queue is empty - sleep 1 sec
 					Thread.sleep(1000);
 				}
-			} catch (Exception e) {
-				if (e instanceof TwitterException) {
-					if (((TwitterException) e).getLocalizedMessage()
-							.startsWith("401:Authentication credentials")) {
-						userFinished = true;
-						st.execute("insert into finished values (" + curUser
-								+ ");");
+			} catch (TwitterException e) {
+				if (e.getLocalizedMessage().startsWith(
+						"401:Authentication credentials")
+						|| e.getLocalizedMessage().startsWith(
+								"404:The URI requested is invalid")) {
+					userFinished = true;
+					st.execute("insert into finished values (" + curUser + ");");
+				}
+				synchronized (errorLog) {
+					try {
+						errorLog.write("token: " + tokenIndex
+								+ "\terror message: " + e.getErrorMessage()
+								+ "\tlocalized message: "
+								+ e.getLocalizedMessage() + "\tuser id: "
+								+ curUser + "\tcursor: " + curCursor
+								+ "\n==============================\n\n");
+						errorLog.flush();
+					} catch (IOException e1) {
 					}
 				}
 				throw e;
@@ -286,7 +298,7 @@ public class Main_Graph_v2 {
 		FileWriter usersQueue = new FileWriter("queue.txt");
 
 		System.out.println("Start");
-		TreeSet<Long> finished = new TreeSet<Long>();
+		HashSet<Long> finished = new HashSet<Long>();
 		ResultSet res = st.executeQuery("select * from finished;");
 		while (res.next()) {
 			finished.add(res.getLong(1));
@@ -319,6 +331,7 @@ public class Main_Graph_v2 {
 		System.out.println("finished");
 		usersQueue.flush();
 		usersQueue.close();
+		System.gc();
 
 		queueReader = new BufferedReader(new FileReader(new File("queue.txt")));
 
@@ -348,11 +361,15 @@ public class Main_Graph_v2 {
 		}
 	}
 
+	static FileWriter errorLog;
+
 	public static void main(String[] args) throws Exception {
 		con = Database.getConnection();
 		st = con.createStatement();
 
 		init();
+
+		errorLog = new FileWriter("errorLog.txt");
 
 		Thread printerThread = new Thread(new Runnable() {
 			@Override
