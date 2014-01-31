@@ -13,7 +13,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Queue;
-import java.util.TreeSet;
 
 import twitter4j.IDs;
 import twitter4j.Twitter;
@@ -56,11 +55,6 @@ public class Main_Graph_v2 {
 
 	// ready to be written to graph [user .... followers]
 	static Queue<MyArrayList> graphQueue;
-
-	// table user id
-	static long maxId = 3000000000L;
-	static long[] userId = new long[(int) (maxId / 64L)];
-	static TreeSet<Long> userId2;
 
 	static int max_batch_size = 100000;
 
@@ -230,8 +224,6 @@ public class Main_Graph_v2 {
 			IOException {
 		FileWriter logWriter = new FileWriter(new File(("log"
 				+ System.currentTimeMillis() + ".txt")));
-		PreparedStatement userid_insertion = con
-				.prepareStatement("insert into userid values(?)");
 
 		PreparedStatement graph_insertion = con
 				.prepareStatement("insert into graph values(?, ?)");
@@ -264,24 +256,7 @@ public class Main_Graph_v2 {
 						}
 						graph_insertion.addBatch();
 
-						boolean insert = false;
-						if (uid1 >= maxId) {
-							if (!userId2.contains((Long) uid1)) {
-								insert = true;
-								userId2.add(uid1);
-							}
-						} else if ((userId[(int) (uid1 / 64)] & (1L << (uid1 % 64))) == 0) {
-							insert = true;
-							userId[(int) (uid1 / 64)] |= (1L << (uid1 % 64));
-						}
-
-						if (insert) {
-							userid_insertion.setLong(1, uid1);
-							userid_insertion.addBatch();
-						}
-
 						if ((i % max_batch_size) == 0 || i == cur.size() - 1) {
-							userid_insertion.executeBatch();
 							graph_insertion.executeBatch();
 
 							con.commit();
@@ -368,11 +343,6 @@ public class Main_Graph_v2 {
 		unfinished_queue2 = new ArrayDeque<Long>();
 		unfinished_map2 = new HashMap<Long, UserEntry>();
 
-		userId2 = new TreeSet<Long>();
-
-		FileWriter usersQueue = new FileWriter("queue.txt");
-		FileWriter usersQueue2 = new FileWriter("queue2.txt");
-
 		System.out.println("Start");
 
 		HashSet<Long> finished = new HashSet<Long>();
@@ -390,36 +360,36 @@ public class Main_Graph_v2 {
 
 		System.out.println("Finish Loading finish table");
 
-		int start = 0, step = 5000000;
-		boolean notFinished = true;
-		while (notFinished) {
+		queueReader = new BufferedReader(new FileReader(new File(
+				"queue_src.txt")));
 
-			res = st.executeQuery("select * from userid limit " + start + ","
-					+ step + ";");
-			start += step;
-			notFinished = false;
-			System.out.println("user id loaded: " + start);
-
-			while (res.next()) {
-				notFinished = true;
-				long id = res.getLong(1);
-				if (id >= maxId)
-					userId2.add(res.getLong(1));
-				else
-					userId[(int) (id / 64)] |= (1L << (id % 64));
-				if (!finished.contains(id))
-					usersQueue.write(id + "\n");
-				if (!finished2.contains(id))
-					usersQueue2.write(id + "\n");
+		FileWriter usersQueue = new FileWriter("queue.txt");
+		FileWriter usersQueue2 = new FileWriter("queue2.txt");
+		String s;
+		int cnt = 0,cnt1=0,cnt2=0;
+		while ((s = queueReader.readLine()) != null) {
+			cnt++;
+			if (cnt % 1000000 == 0)
+				System.out.println(cnt + " " + cnt1 + " " + cnt2);
+			if (cnt1 > 1000000 && cnt2 > 1000000)
+				break;
+			Long id = Long.parseLong(s);
+			if (!finished.contains(id)) {
+				usersQueue.write(s + "\n");
+				cnt1++;
 			}
-			System.out.println("!!!");
+			if (!finished2.contains(id)) {
+				usersQueue2.write(s + "\n");
+				cnt2++;
+			}
 		}
-		System.out.println("finished");
+
+		queueReader.close();
 		usersQueue.flush();
-		usersQueue2.flush();
 		usersQueue.close();
+
+		usersQueue2.flush();
 		usersQueue2.close();
-		System.gc();
 
 		queueReader = new BufferedReader(new FileReader(new File("queue.txt")));
 		queueReader2 = new BufferedReader(
