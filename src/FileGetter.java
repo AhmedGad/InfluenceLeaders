@@ -6,17 +6,16 @@ public class FileGetter {
 
 	static ArrayList<File> files;
 	static {
-		files = new ArrayList<File>(Arrays.asList(new File("../repo")
-				.listFiles()));
+		files = new ArrayList<File>(Arrays.asList(new File(".").listFiles()));
 	}
 
-	static ArrayList<File> getListForPrefix(String prefix) {
+	static ArrayList<File> getListForPrefix(String prefix, boolean TextOnly) {
 		ArrayList<File> res = new ArrayList<File>();
 		for (File file : files) {
-			if (file.getName().startsWith(prefix))
+			if (file.getName().startsWith(prefix)
+					&& (!TextOnly || file.getName().endsWith(".txt")))
 				res.add(file);
 		}
 		return res;
 	}
-
 }

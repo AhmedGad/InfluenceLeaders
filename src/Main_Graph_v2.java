@@ -50,6 +50,7 @@ public class Main_Graph_v2 {
 	private static int collected_cnt = 0;
 
 	private static int total_fetched = 0;
+	private static int total_finished = 0;
 
 	private static int threadNum = 60;
 
@@ -160,6 +161,7 @@ public class Main_Graph_v2 {
 								"404:The URI requested is invalid")) {
 					userFinished = true;
 					finishedWriter.write(curUser + "\n");
+					total_finished++;
 					finishedWriter.flush();
 				}
 				synchronized (errorLog) {
@@ -221,7 +223,7 @@ public class Main_Graph_v2 {
 					}
 					graphWriter.write("\n");
 
-					if (reopenCnt > 500000) {
+					if (reopenCnt > 10000000) {
 						reopenCnt = 0;
 						graphWriter.close();
 						graphWriter = new FileWriter(new File("graph @ "
@@ -231,6 +233,7 @@ public class Main_Graph_v2 {
 					finished1Cnt++;
 					synchronized (finishedWriter) {
 						finishedWriter.write(uid2 + "\n");
+						total_finished++;
 						finishedWriter.flush();
 					}
 
@@ -277,13 +280,15 @@ public class Main_Graph_v2 {
 					+ database_cnt + " ,fetched: " + collected_cnt + " ,gap: "
 					+ (collected_cnt - database_cnt)
 					+ " ,databas queue size : " + graphQueue.size()
-					+ " ,total fetched: " + total_fetched + "\n\n");
+					+ " ,total fetched: " + total_fetched + " total users: "
+					+ total_finished + "\n\n");
 
 			writer.write("min: " + min++ + " written to database, "
 					+ database_cnt + " ,fetched: " + collected_cnt + " ,gap: "
 					+ (collected_cnt - database_cnt)
 					+ " ,databas queue size : " + graphQueue.size()
-					+ " ,total fetched: " + total_fetched + "\n");
+					+ " ,total fetched: " + total_fetched + " total users: "
+					+ total_finished + "\n");
 
 			writer.flush();
 			try {
@@ -301,10 +306,6 @@ public class Main_Graph_v2 {
 		unfinished_queue = new ArrayDeque<Long>();
 		unfinished_map = new HashMap<Long, UserEntry>();
 
-		finishedWriter = new FileWriter("finished @ " + filesTimeStamp
-				+ " .txt");
-		graphWriter = new FileWriter("graph @ " + filesTimeStamp + ".txt");
-
 		System.out.println("Start");
 
 		HashSet<Long> finished = new HashSet<Long>();
@@ -312,6 +313,10 @@ public class Main_Graph_v2 {
 		loadFinished(finished);
 
 		System.out.println("Finish Loading finish table");
+
+		finishedWriter = new FileWriter("finished @ " + filesTimeStamp
+				+ " .txt");
+		graphWriter = new FileWriter("graph @ " + filesTimeStamp + ".txt");
 
 		FileWriter usersQueue = new FileWriter("queue.txt");
 
@@ -347,42 +352,53 @@ public class Main_Graph_v2 {
 		}
 	}
 
-	private static void loadQueues(FileWriter usersQueue, HashSet<Long> finished)
+	private static void loadQueues(FileWriter usersQueue, HashSet<Long> vis)
 			throws Exception {
-
-		ArrayList<File> idList = FileGetter.getListForPrefix("userID");
-		int cnt1 = 0;
-		int cnt2 = 0;
-
+		System.out.println("\nInitiate queue: ");
+		ArrayList<File> idList = FileGetter.getListForPrefix("userID", true);
+		int cnt = 0;
+		float sum = 0;
 		for (File file : idList) {
 			BufferedReader buff = new BufferedReader(new FileReader(file));
 			String id;
+			int unique = 0, total = 0;
 			while ((id = buff.readLine()) != null) {
+				total++;
+				sum++;
 				Long curId = new Long(id);
-				if (!finished.contains(curId)) {
-					cnt1++;
+				if (!vis.contains(curId)) {
+					cnt++;
+					unique++;
 					usersQueue.write(id + "\n");
-					finished.add(curId);
+					vis.add(curId);
 				}
-				if (cnt1 >= 1000000 && cnt2 >= 1000000)
+				if (cnt >= 1000000)
 					break;
 			}
+			System.out.println(file.getName() + " total: " + total + " new: "
+					+ unique + " percentage: " + (unique * 100 / total) + "%");
 			buff.close();
-			if (cnt1 >= 1000000 && cnt2 >= 1000000)
+			if (cnt >= 1000000)
 				break;
 		}
+		System.out.println(cnt + " New users added to queue."
+				+ " New percentage: " + cnt * 100 / sum + "%");
 	}
 
 	private static void loadFinished(HashSet<Long> finished) throws Exception {
-		ArrayList<File> finishedList = FileGetter.getListForPrefix("finished");
+		ArrayList<File> finishedList = FileGetter.getListForPrefix("finished",
+				true);
 		int cnt = 0;
 		for (File file : finishedList) {
 			BufferedReader buff = new BufferedReader(new FileReader(file));
 			String id;
+			int i = 0;
 			while ((id = buff.readLine()) != null) {
 				finished.add(new Long(id));
 				cnt++;
+				i++;
 			}
+			System.out.println(file.getName() + " " + i);
 			buff.close();
 		}
 
