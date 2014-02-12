@@ -1,13 +1,9 @@
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -42,9 +38,6 @@ public class Main_Graph_v2 {
 	static Queue<Integer> freeTokens2 = new ArrayDeque<Integer>();
 
 	static String accesstokens[][];
-
-	static Connection con;
-	static Statement st;
 
 	// user id not finished yet , not written to database, still in user queue
 	static Queue<Long> unfinished_queue;
@@ -122,6 +115,14 @@ public class Main_Graph_v2 {
 		return entry;
 	}
 
+	static Object lock1 = new Object();
+	static Object lock2 = new Object();
+
+	static String filesTimeStamp = System.currentTimeMillis() + "";
+	static FileWriter finishedWriter;
+	static FileWriter finished2Writer;
+	static FileWriter graphWriter;
+
 	/**
 	 * fetch followers
 	 * 
@@ -167,12 +168,15 @@ public class Main_Graph_v2 {
 							total_fetched2 += followers_ar.length;
 
 						if (!res.hasNext()) {
-							graphQueue.add(followers);
-
-							if (fetchFollowers)
-								collected_cnt += followers.size() - 1;
-							else
-								collected_cnt2 += followers.size() - 1;
+							synchronized (graphQueue) {
+								graphQueue.add(followers);
+							}
+							synchronized (lock2) {
+								if (fetchFollowers)
+									collected_cnt += followers.size() - 1;
+								else
+									collected_cnt2 += followers.size() - 1;
+							}
 
 							userFinished = true;
 							curCursor = -1;
@@ -189,12 +193,13 @@ public class Main_Graph_v2 {
 						|| e.getLocalizedMessage().startsWith(
 								"404:The URI requested is invalid")) {
 					userFinished = true;
-					if (fetchFollowers)
-						st.execute("insert into finished values (" + curUser
-								+ ");");
-					else
-						st.execute("insert into finished2 values (" + curUser
-								+ ");");
+					if (fetchFollowers) {
+						finishedWriter.write(curUser + "\n");
+						finishedWriter.flush();
+					} else {
+						finished2Writer.write(curUser + "\n");
+						finished2Writer.flush();
+					}
 				}
 				synchronized (errorLog) {
 					try {
@@ -219,19 +224,16 @@ public class Main_Graph_v2 {
 		}
 	}
 
+	static int finished1Cnt = 0;
+	static int finished2Cnt = 0;
+
 	@SuppressWarnings("resource")
-	public static void writer() throws SQLException, InterruptedException,
-			IOException {
+	public static void writer() throws InterruptedException, IOException {
 		FileWriter logWriter = new FileWriter(new File(("log"
 				+ System.currentTimeMillis() + ".txt")));
 
-		PreparedStatement graph_insertion = con
-				.prepareStatement("insert into graph values(?, ?)");
-
-		// I think better commint if windows
-		con.setAutoCommit(false);
-
 		MyArrayList cur = null;
+		int reopenCnt = 0;
 
 		while (true) {
 			try {
@@ -248,43 +250,62 @@ public class Main_Graph_v2 {
 					for (int i = 1; i < cur.size(); i++) {
 						uid1 = cur.get(i);
 						if (cur.isFollowers) {
-							graph_insertion.setLong(1, uid1);
-							graph_insertion.setLong(2, uid2);
+							graphWriter.write(uid1 + " " + uid2 + "\n");
 						} else {
-							graph_insertion.setLong(1, uid2);
-							graph_insertion.setLong(2, uid1);
+							graphWriter.write(uid2 + " " + uid1 + "\n");
 						}
-						graph_insertion.addBatch();
 
 						if ((i % max_batch_size) == 0 || i == cur.size() - 1) {
-							graph_insertion.executeBatch();
-
-							con.commit();
+							graphWriter.flush();
 
 							database_cnt += i - last;
+							reopenCnt += i - last;
 							last = i;
 						}
 					}
-					if (cur.isFollowers)
-						st.execute("insert into finished values (" + uid2
-								+ ");");
-					else
-						st.execute("insert into finished2 values (" + uid2
-								+ ");");
+
+					if (reopenCnt > 500000) {
+						reopenCnt = 0;
+						graphWriter.close();
+						graphWriter = new FileWriter(new File("graph @ "
+								+ System.currentTimeMillis() + ".txt"));
+					}
+
+					if (cur.isFollowers) {
+						finished1Cnt++;
+						synchronized (finishedWriter) {
+							finishedWriter.write(uid2 + "\n");
+							finishedWriter.flush();
+						}
+					} else {
+						finished2Cnt++;
+						synchronized (finished2Writer) {
+							finished2Writer.write(uid2 + "\n");
+							finished2Writer.flush();
+						}
+					}
+
+					if (graphQueue.size() == 0
+							&& collected_cnt + collected_cnt2 - database_cnt != 0)
+						System.out
+								.println("\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n========================\n\n\n\n\n\n\n\n\n\n\n\n");
 
 					System.out.println((cur.isFollowers ? "" : "\t\t")
 							+ "finish writing " + (cur.size() - 1)
 							+ " records in "
 							+ (System.currentTimeMillis() - t1)
 							+ " millis, waited list " + graphQueue.size()
-							+ " user id " + uid2);
+							+ " user id " + uid2 + " finished1: "
+							+ finished1Cnt + " finished2: " + finished2Cnt);
 
 					logWriter.write((cur.isFollowers ? "" : "\t\t")
 							+ "finish writing " + (cur.size() - 1)
 							+ " records in "
 							+ (System.currentTimeMillis() - t1)
 							+ " millis, waited list " + graphQueue.size()
-							+ " user id " + uid2 + "\n");
+							+ " user id " + uid2 + " finished1: "
+							+ finished1Cnt + " finished2: " + finished2Cnt
+							+ "\n");
 
 					logWriter.flush();
 				} else {
@@ -334,7 +355,7 @@ public class Main_Graph_v2 {
 		}
 	}
 
-	private static void init() throws SQLException, Exception {
+	private static void init() throws Exception {
 		graphQueue = new ArrayDeque<MyArrayList>();
 
 		unfinished_queue = new ArrayDeque<Long>();
@@ -343,52 +364,27 @@ public class Main_Graph_v2 {
 		unfinished_queue2 = new ArrayDeque<Long>();
 		unfinished_map2 = new HashMap<Long, UserEntry>();
 
+		finishedWriter = new FileWriter("finished @ " + filesTimeStamp
+				+ " .txt");
+		finished2Writer = new FileWriter("2finished @ " + filesTimeStamp
+				+ ".txt");
+		graphWriter = new FileWriter("graph @ " + filesTimeStamp + ".txt");
+
 		System.out.println("Start");
 
 		HashSet<Long> finished = new HashSet<Long>();
 		HashSet<Long> finished2 = new HashSet<Long>();
 
-		ResultSet res = st.executeQuery("select * from finished;");
-		while (res.next()) {
-			finished.add(res.getLong(1));
-		}
-
-		res = st.executeQuery("select * from finished2;");
-		while (res.next()) {
-			finished2.add(res.getLong(1));
-		}
+		loadFinished(finished, finished2);
 
 		System.out.println("Finish Loading finish table");
 
-		queueReader = new BufferedReader(new FileReader(new File(
-				"queue_src.txt")));
-
 		FileWriter usersQueue = new FileWriter("queue.txt");
 		FileWriter usersQueue2 = new FileWriter("queue2.txt");
-		String s;
-		int cnt = 0,cnt1=0,cnt2=0;
-		while ((s = queueReader.readLine()) != null) {
-			cnt++;
-			if (cnt % 1000000 == 0)
-				System.out.println(cnt + " " + cnt1 + " " + cnt2);
-			if (cnt1 > 1000000 && cnt2 > 1000000)
-				break;
-			Long id = Long.parseLong(s);
-			if (!finished.contains(id)) {
-				usersQueue.write(s + "\n");
-				cnt1++;
-			}
-			if (!finished2.contains(id)) {
-				usersQueue2.write(s + "\n");
-				cnt2++;
-			}
-		}
 
-		queueReader.close();
-		usersQueue.flush();
+		loadQueues(usersQueue, usersQueue2, finished, finished2);
+
 		usersQueue.close();
-
-		usersQueue2.flush();
 		usersQueue2.close();
 
 		queueReader = new BufferedReader(new FileReader(new File("queue.txt")));
@@ -421,12 +417,72 @@ public class Main_Graph_v2 {
 		}
 	}
 
+	private static void loadQueues(FileWriter usersQueue,
+			FileWriter usersQueue2, HashSet<Long> finished,
+			HashSet<Long> finished2) throws Exception {
+
+		ArrayList<File> idList = FileGetter.getListForPrefix("userID");
+		int cnt1 = 0;
+		int cnt2 = 0;
+
+		for (File file : idList) {
+			BufferedReader buff = new BufferedReader(new FileReader(file));
+			String id;
+			while ((id = buff.readLine()) != null) {
+				Long curId = new Long(id);
+				if (!finished.contains(curId)) {
+					cnt1++;
+					usersQueue.write(id + "\n");
+					finished.add(curId);
+				}
+				if (!finished2.contains(curId)) {
+					cnt2++;
+					usersQueue2.write(id + "\n");
+					finished2.add(curId);
+				}
+				if (cnt1 >= 1000000 && cnt2 >= 1000000)
+					break;
+			}
+			buff.close();
+			if (cnt1 >= 1000000 && cnt2 >= 1000000)
+				break;
+		}
+	}
+
+	private static void loadFinished(HashSet<Long> finished,
+			HashSet<Long> finished2) throws Exception {
+		ArrayList<File> finishedList = FileGetter.getListForPrefix("finished");
+		int cnt = 0;
+		for (File file : finishedList) {
+			BufferedReader buff = new BufferedReader(new FileReader(file));
+			String id;
+			while ((id = buff.readLine()) != null) {
+				finished.add(new Long(id));
+				cnt++;
+			}
+			buff.close();
+		}
+
+		System.out.println(cnt + " finished user loaded.");
+		cnt = 0;
+
+		ArrayList<File> finished2List = FileGetter
+				.getListForPrefix("2finished");
+		for (File file : finished2List) {
+			BufferedReader buff = new BufferedReader(new FileReader(file));
+			String id;
+			while ((id = buff.readLine()) != null) {
+				finished2.add(new Long(id));
+				cnt++;
+			}
+			buff.close();
+		}
+		System.out.println(cnt + " finished2 user loaded.");
+	}
+
 	static FileWriter errorLog;
 
 	public static void main(String[] args) throws Exception {
-		con = Database.getConnection();
-		st = con.createStatement();
-
 		init();
 
 		errorLog = new FileWriter("errorLog.txt");
