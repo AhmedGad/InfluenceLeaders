@@ -1,6 +1,5 @@
 import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -35,16 +34,12 @@ public class Main_Graph_v2 {
 	// to be computed on runtime
 	static int totalTokens = 0, flushLimit = 1000;
 	static Queue<Integer> freeTokens = new ArrayDeque<Integer>();
-	static Queue<Integer> freeTokens2 = new ArrayDeque<Integer>();
 
 	static String accesstokens[][];
 
 	// user id not finished yet , not written to database, still in user queue
 	static Queue<Long> unfinished_queue;
 	static HashMap<Long, UserEntry> unfinished_map;
-
-	static Queue<Long> unfinished_queue2;
-	static HashMap<Long, UserEntry> unfinished_map2;
 
 	// ready to be written to graph [user .... followers]
 	static Queue<MyArrayList> graphQueue;
@@ -53,15 +48,12 @@ public class Main_Graph_v2 {
 
 	static int database_cnt = 0;
 	private static int collected_cnt = 0;
-	private static int collected_cnt2 = 0;
 
 	private static int total_fetched = 0;
-	private static int total_fetched2 = 0;
 
 	private static int threadNum = 60;
 
 	private static BufferedReader queueReader;
-	private static BufferedReader queueReader2;
 
 	/**
 	 * get new user id from queue
@@ -69,22 +61,14 @@ public class Main_Graph_v2 {
 	 * @return
 	 * @throws IOException
 	 */
-	static synchronized long pop(boolean fetchFollowers) throws IOException {
+	static synchronized long pop() throws IOException {
 		String id = null;
 
-		if (fetchFollowers) {
-			// check unfinished first
-			if (!unfinished_queue.isEmpty())
-				return unfinished_queue.poll();
+		// check unfinished first
+		if (!unfinished_queue.isEmpty())
+			return unfinished_queue.poll();
 
-			id = queueReader.readLine();
-		} else {
-			// check unfinished first
-			if (!unfinished_queue2.isEmpty())
-				return unfinished_queue2.poll();
-
-			id = queueReader2.readLine();
-		}
+		id = queueReader.readLine();
 
 		if (id == null)
 			return -1;
@@ -93,22 +77,15 @@ public class Main_Graph_v2 {
 	}
 
 	static synchronized void add_unfinished_user_entry(long uid, long cursor,
-			MyArrayList followers, boolean fetchFollowers) {
-		if (fetchFollowers) {
-			unfinished_queue.add(uid);
-			unfinished_map.put(uid, new UserEntry(cursor, followers));
-		} else {
-			unfinished_queue2.add(uid);
-			unfinished_map2.put(uid, new UserEntry(cursor, followers));
-		}
+			MyArrayList followers) {
+		unfinished_queue.add(uid);
+		unfinished_map.put(uid, new UserEntry(cursor, followers));
 	}
 
-	static synchronized UserEntry getEntry(long curUser, boolean fetchFollowers) {
-		UserEntry entry = fetchFollowers ? unfinished_map
-				.remove((Long) curUser) : unfinished_map2
-				.remove((Long) curUser);
+	static synchronized UserEntry getEntry(long curUser) {
+		UserEntry entry = unfinished_map.remove((Long) curUser);
 		if (entry == null) {
-			MyArrayList list = new MyArrayList(fetchFollowers);
+			MyArrayList list = new MyArrayList();
 			entry = new UserEntry(-1, list);
 			list.add(curUser);
 		}
@@ -120,7 +97,6 @@ public class Main_Graph_v2 {
 
 	static String filesTimeStamp = System.currentTimeMillis() + "";
 	static FileWriter finishedWriter;
-	static FileWriter finished2Writer;
 	static FileWriter graphWriter;
 
 	/**
@@ -130,8 +106,7 @@ public class Main_Graph_v2 {
 	 * @throws TwitterException
 	 * @throws Exception
 	 */
-	public static void fetch(int tokenIndex, boolean fetchFollowers)
-			throws TwitterException, Exception {
+	public static void fetch(int tokenIndex) throws TwitterException, Exception {
 
 		Twitter twitter = getTwitterInstance(getConfiguration(
 				accesstokens[tokenIndex][0], accesstokens[tokenIndex][1],
@@ -144,38 +119,29 @@ public class Main_Graph_v2 {
 		while (true) {
 			try {
 				// pick user from the queue
-				if ((curUser = pop(fetchFollowers)) > -1) {
-					UserEntry entry = getEntry(curUser, fetchFollowers);
+				if ((curUser = pop()) > -1) {
+					UserEntry entry = getEntry(curUser);
 					curCursor = entry.cursor;
 					followers = entry.followers;
 
 					userFinished = false;
 					while (true) {
 						IDs res = null;
-						if (fetchFollowers)
-							res = twitter.getFollowersIDs(curUser, curCursor);
-						else
-							res = twitter.getFriendsIDs(curUser, curCursor);
+						res = twitter.getFollowersIDs(curUser, curCursor);
 
 						long[] followers_ar = res.getIDs();
 						curCursor = res.getNextCursor();
 						for (int i = 0; i < followers_ar.length; i++)
 							followers.add(followers_ar[i]);
-
-						if (fetchFollowers)
+						synchronized (lock1) {
 							total_fetched += followers_ar.length;
-						else
-							total_fetched2 += followers_ar.length;
-
+						}
 						if (!res.hasNext()) {
 							synchronized (graphQueue) {
 								graphQueue.add(followers);
 							}
 							synchronized (lock2) {
-								if (fetchFollowers)
-									collected_cnt += followers.size() - 1;
-								else
-									collected_cnt2 += followers.size() - 1;
+								collected_cnt += followers.size() - 1;
 							}
 
 							userFinished = true;
@@ -193,18 +159,12 @@ public class Main_Graph_v2 {
 						|| e.getLocalizedMessage().startsWith(
 								"404:The URI requested is invalid")) {
 					userFinished = true;
-					if (fetchFollowers) {
-						finishedWriter.write(curUser + "\n");
-						finishedWriter.flush();
-					} else {
-						finished2Writer.write(curUser + "\n");
-						finished2Writer.flush();
-					}
+					finishedWriter.write(curUser + "\n");
+					finishedWriter.flush();
 				}
 				synchronized (errorLog) {
 					try {
 						errorLog.write("token: " + tokenIndex
-								+ "\tfetch followers: " + fetchFollowers
 								+ "\terror message: " + e.getErrorMessage()
 								+ "\tlocalized message: "
 								+ e.getLocalizedMessage() + "\tuser id: "
@@ -217,15 +177,13 @@ public class Main_Graph_v2 {
 				throw e;
 			} finally {
 				if (!userFinished) {
-					add_unfinished_user_entry(curUser, curCursor, followers,
-							fetchFollowers);
+					add_unfinished_user_entry(curUser, curCursor, followers);
 				}
 			}
 		}
 	}
 
 	static int finished1Cnt = 0;
-	static int finished2Cnt = 0;
 
 	@SuppressWarnings("resource")
 	public static void writer() throws InterruptedException, IOException {
@@ -245,15 +203,13 @@ public class Main_Graph_v2 {
 					// + " record.");
 					// followed user
 					Long uid1, uid2 = cur.get(0);
+					graphWriter.write(uid2 + " followers:\n\n");
+
 					int last = 0;
 					long t1 = System.currentTimeMillis();
 					for (int i = 1; i < cur.size(); i++) {
 						uid1 = cur.get(i);
-						if (cur.isFollowers) {
-							graphWriter.write(uid1 + " " + uid2 + "\n");
-						} else {
-							graphWriter.write(uid2 + " " + uid1 + "\n");
-						}
+						graphWriter.write(uid1 + "\n");
 
 						if ((i % max_batch_size) == 0 || i == cur.size() - 1) {
 							graphWriter.flush();
@@ -263,6 +219,7 @@ public class Main_Graph_v2 {
 							last = i;
 						}
 					}
+					graphWriter.write("\n");
 
 					if (reopenCnt > 500000) {
 						reopenCnt = 0;
@@ -271,41 +228,30 @@ public class Main_Graph_v2 {
 								+ System.currentTimeMillis() + ".txt"));
 					}
 
-					if (cur.isFollowers) {
-						finished1Cnt++;
-						synchronized (finishedWriter) {
-							finishedWriter.write(uid2 + "\n");
-							finishedWriter.flush();
-						}
-					} else {
-						finished2Cnt++;
-						synchronized (finished2Writer) {
-							finished2Writer.write(uid2 + "\n");
-							finished2Writer.flush();
-						}
+					finished1Cnt++;
+					synchronized (finishedWriter) {
+						finishedWriter.write(uid2 + "\n");
+						finishedWriter.flush();
 					}
 
 					if (graphQueue.size() == 0
-							&& collected_cnt + collected_cnt2 - database_cnt != 0)
+							&& collected_cnt - database_cnt != 0)
 						System.out
 								.println("\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n========================\n\n\n\n\n\n\n\n\n\n\n\n");
 
-					System.out.println((cur.isFollowers ? "" : "\t\t")
-							+ "finish writing " + (cur.size() - 1)
+					System.out.println("finish writing " + (cur.size() - 1)
 							+ " records in "
 							+ (System.currentTimeMillis() - t1)
 							+ " millis, waited list " + graphQueue.size()
 							+ " user id " + uid2 + " finished1: "
-							+ finished1Cnt + " finished2: " + finished2Cnt);
+							+ finished1Cnt);
 
-					logWriter.write((cur.isFollowers ? "" : "\t\t")
-							+ "finish writing " + (cur.size() - 1)
+					logWriter.write("finish writing " + (cur.size() - 1)
 							+ " records in "
 							+ (System.currentTimeMillis() - t1)
 							+ " millis, waited list " + graphQueue.size()
 							+ " user id " + uid2 + " finished1: "
-							+ finished1Cnt + " finished2: " + finished2Cnt
-							+ "\n");
+							+ finished1Cnt + "\n");
 
 					logWriter.flush();
 				} else {
@@ -328,22 +274,16 @@ public class Main_Graph_v2 {
 		while (true) {
 
 			System.out.println("\n\nmin: " + min + " written to database, "
-					+ database_cnt + " ,fetched1: " + collected_cnt
-					+ " ,fetched2: " + collected_cnt2 + " ,gap: "
-					+ (collected_cnt + collected_cnt2 - database_cnt)
+					+ database_cnt + " ,fetched: " + collected_cnt + " ,gap: "
+					+ (collected_cnt - database_cnt)
 					+ " ,databas queue size : " + graphQueue.size()
-					+ " ,total fetched1: " + total_fetched
-					+ " ,total fetched2: " + total_fetched2 + " ,sum: "
-					+ (total_fetched + total_fetched2) + "\n\n");
+					+ " ,total fetched: " + total_fetched + "\n\n");
 
 			writer.write("min: " + min++ + " written to database, "
-					+ database_cnt + " ,fetched1: " + collected_cnt
-					+ " ,fetched2: " + collected_cnt2 + " ,gap: "
-					+ (collected_cnt + collected_cnt2 - database_cnt)
+					+ database_cnt + " ,fetched: " + collected_cnt + " ,gap: "
+					+ (collected_cnt - database_cnt)
 					+ " ,databas queue size : " + graphQueue.size()
-					+ " ,total fetched1: " + total_fetched
-					+ " ,total fetched2: " + total_fetched2 + " ,sum: "
-					+ (total_fetched + total_fetched2) + "\n");
+					+ " ,total fetched: " + total_fetched + "\n");
 
 			writer.flush();
 			try {
@@ -361,35 +301,25 @@ public class Main_Graph_v2 {
 		unfinished_queue = new ArrayDeque<Long>();
 		unfinished_map = new HashMap<Long, UserEntry>();
 
-		unfinished_queue2 = new ArrayDeque<Long>();
-		unfinished_map2 = new HashMap<Long, UserEntry>();
-
 		finishedWriter = new FileWriter("finished @ " + filesTimeStamp
 				+ " .txt");
-		finished2Writer = new FileWriter("2finished @ " + filesTimeStamp
-				+ ".txt");
 		graphWriter = new FileWriter("graph @ " + filesTimeStamp + ".txt");
 
 		System.out.println("Start");
 
 		HashSet<Long> finished = new HashSet<Long>();
-		HashSet<Long> finished2 = new HashSet<Long>();
 
-		loadFinished(finished, finished2);
+		loadFinished(finished);
 
 		System.out.println("Finish Loading finish table");
 
 		FileWriter usersQueue = new FileWriter("queue.txt");
-		FileWriter usersQueue2 = new FileWriter("queue2.txt");
 
-		loadQueues(usersQueue, usersQueue2, finished, finished2);
+		loadQueues(usersQueue, finished);
 
 		usersQueue.close();
-		usersQueue2.close();
 
 		queueReader = new BufferedReader(new FileReader(new File("queue.txt")));
-		queueReader2 = new BufferedReader(
-				new FileReader(new File("queue2.txt")));
 
 		System.out.println("Finished Loading ALL");
 		finished.clear();
@@ -417,9 +347,8 @@ public class Main_Graph_v2 {
 		}
 	}
 
-	private static void loadQueues(FileWriter usersQueue,
-			FileWriter usersQueue2, HashSet<Long> finished,
-			HashSet<Long> finished2) throws Exception {
+	private static void loadQueues(FileWriter usersQueue, HashSet<Long> finished)
+			throws Exception {
 
 		ArrayList<File> idList = FileGetter.getListForPrefix("userID");
 		int cnt1 = 0;
@@ -435,11 +364,6 @@ public class Main_Graph_v2 {
 					usersQueue.write(id + "\n");
 					finished.add(curId);
 				}
-				if (!finished2.contains(curId)) {
-					cnt2++;
-					usersQueue2.write(id + "\n");
-					finished2.add(curId);
-				}
 				if (cnt1 >= 1000000 && cnt2 >= 1000000)
 					break;
 			}
@@ -449,8 +373,7 @@ public class Main_Graph_v2 {
 		}
 	}
 
-	private static void loadFinished(HashSet<Long> finished,
-			HashSet<Long> finished2) throws Exception {
+	private static void loadFinished(HashSet<Long> finished) throws Exception {
 		ArrayList<File> finishedList = FileGetter.getListForPrefix("finished");
 		int cnt = 0;
 		for (File file : finishedList) {
@@ -464,20 +387,6 @@ public class Main_Graph_v2 {
 		}
 
 		System.out.println(cnt + " finished user loaded.");
-		cnt = 0;
-
-		ArrayList<File> finished2List = FileGetter
-				.getListForPrefix("2finished");
-		for (File file : finished2List) {
-			BufferedReader buff = new BufferedReader(new FileReader(file));
-			String id;
-			while ((id = buff.readLine()) != null) {
-				finished2.add(new Long(id));
-				cnt++;
-			}
-			buff.close();
-		}
-		System.out.println(cnt + " finished2 user loaded.");
 	}
 
 	static FileWriter errorLog;
@@ -515,30 +424,27 @@ public class Main_Graph_v2 {
 
 		int curTokenNumber = 0;
 		for (int i = 0; i < threadNum; i++) {
-			new Thread(new MyThread(curTokenNumber, i, i % 2 == 0)).start();
+			new Thread(new MyThread(curTokenNumber, i)).start();
 			if (i % 2 == 1)
 				curTokenNumber++;
 		}
 
 		for (int i = curTokenNumber; i < totalTokens; i++) {
 			freeTokens.add(i);
-			freeTokens2.add(i);
 		}
 	}
 
 	static class MyArrayList {
-		boolean isFollowers;
 
 		private ArrayList<long[]> list;
 		private int listIndx, arrIndx;
 		private final int len = 5000;
 
-		public MyArrayList(boolean followers) {
+		public MyArrayList() {
 			list = new ArrayList<long[]>();
 			list.add(new long[len]);
 			listIndx = 0;
 			arrIndx = 0;
-			isFollowers = followers;
 		}
 
 		void add(long n) {
@@ -572,19 +478,17 @@ public class Main_Graph_v2 {
 
 	static class MyThread implements Runnable {
 		int tokenIndex, threadIndex;
-		boolean fetchFollowers;
 
-		public MyThread(int tokenIndex, int threadIndex, boolean fetchFollowers) {
+		public MyThread(int tokenIndex, int threadIndex) {
 			this.tokenIndex = tokenIndex;
 			this.threadIndex = threadIndex;
-			this.fetchFollowers = fetchFollowers;
 		}
 
 		@Override
 		public void run() {
 			while (true) {
 				try {
-					Main_Graph_v2.fetch(tokenIndex, fetchFollowers);
+					Main_Graph_v2.fetch(tokenIndex);
 				} catch (TwitterException e) {
 					// sleep 2 sec on exception
 					try {
@@ -597,16 +501,10 @@ public class Main_Graph_v2 {
 					if (e.getErrorMessage() != null
 							&& e.getErrorMessage()
 									.equals("Rate limit exceeded")) {
-						if (fetchFollowers)
-							synchronized (freeTokens) {
-								freeTokens.add(tokenIndex);
-								tokenIndex = freeTokens.poll();
-							}
-						else
-							synchronized (freeTokens2) {
-								freeTokens2.add(tokenIndex);
-								tokenIndex = freeTokens2.poll();
-							}
+						synchronized (freeTokens) {
+							freeTokens.add(tokenIndex);
+							tokenIndex = freeTokens.poll();
+						}
 					}
 				} catch (Exception e) {
 				}
