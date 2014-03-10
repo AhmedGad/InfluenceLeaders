@@ -1,3 +1,4 @@
+package graphBuilder;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
@@ -16,7 +17,7 @@ import twitter4j.TwitterFactory;
 import twitter4j.conf.Configuration;
 import twitter4j.conf.ConfigurationBuilder;
 
-public class Main_Graph_v2 {
+public class GraphBuilder {
 	private static Configuration getConfiguration(String ConsumerKey,
 			String ConsumerSecret, String AccessToken, String TokenSecret) {
 		ConfigurationBuilder cb = new ConfigurationBuilder();
@@ -42,7 +43,7 @@ public class Main_Graph_v2 {
 	static HashMap<Long, UserEntry> unfinished_map;
 
 	// ready to be written to graph [user .... followers]
-	static Queue<MyArrayList> graphQueue;
+	static Queue<MyLongArrayList> graphQueue;
 
 	static int max_batch_size = 100000;
 
@@ -78,7 +79,7 @@ public class Main_Graph_v2 {
 	}
 
 	static synchronized void add_unfinished_user_entry(long uid, long cursor,
-			MyArrayList followers) {
+			MyLongArrayList followers) {
 		unfinished_queue.add(uid);
 		unfinished_map.put(uid, new UserEntry(cursor, followers));
 	}
@@ -86,7 +87,7 @@ public class Main_Graph_v2 {
 	static synchronized UserEntry getEntry(long curUser) {
 		UserEntry entry = unfinished_map.remove((Long) curUser);
 		if (entry == null) {
-			MyArrayList list = new MyArrayList();
+			MyLongArrayList list = new MyLongArrayList();
 			entry = new UserEntry(-1, list);
 			list.add(curUser);
 		}
@@ -114,7 +115,7 @@ public class Main_Graph_v2 {
 				accesstokens[tokenIndex][2], accesstokens[tokenIndex][3]));
 
 		long curUser = -1, curCursor = -1;
-		MyArrayList followers = null;
+		MyLongArrayList followers = null;
 		boolean userFinished = true;
 
 		while (true) {
@@ -192,7 +193,7 @@ public class Main_Graph_v2 {
 		FileWriter logWriter = new FileWriter(new File(("log"
 				+ System.currentTimeMillis() + ".txt")));
 
-		MyArrayList cur = null;
+		MyLongArrayList cur = null;
 		int reopenCnt = 0;
 
 		while (true) {
@@ -301,7 +302,7 @@ public class Main_Graph_v2 {
 	}
 
 	private static void init() throws Exception {
-		graphQueue = new ArrayDeque<MyArrayList>();
+		graphQueue = new ArrayDeque<MyLongArrayList>();
 
 		unfinished_queue = new ArrayDeque<Long>();
 		unfinished_map = new HashMap<Long, UserEntry>();
@@ -450,43 +451,11 @@ public class Main_Graph_v2 {
 		}
 	}
 
-	static class MyArrayList {
-
-		private ArrayList<long[]> list;
-		private int listIndx, arrIndx;
-		private final int len = 5000;
-
-		public MyArrayList() {
-			list = new ArrayList<long[]>();
-			list.add(new long[len]);
-			listIndx = 0;
-			arrIndx = 0;
-		}
-
-		void add(long n) {
-			if (arrIndx == len) {
-				arrIndx = 0;
-				listIndx++;
-				list.add(new long[len]);
-			}
-			list.get(listIndx)[arrIndx] = n;
-			arrIndx++;
-		}
-
-		long get(int i) {
-			return list.get(i / len)[i % len];
-		}
-
-		int size() {
-			return listIndx * len + arrIndx;
-		}
-	}
-
 	static class UserEntry {
 		long cursor;
-		MyArrayList followers;
+		MyLongArrayList followers;
 
-		public UserEntry(long cursor, MyArrayList followers) {
+		public UserEntry(long cursor, MyLongArrayList followers) {
 			this.cursor = cursor;
 			this.followers = followers;
 		}
@@ -504,7 +473,7 @@ public class Main_Graph_v2 {
 		public void run() {
 			while (true) {
 				try {
-					Main_Graph_v2.fetch(tokenIndex);
+					GraphBuilder.fetch(tokenIndex);
 				} catch (TwitterException e) {
 					// sleep 2 sec on exception
 					try {
