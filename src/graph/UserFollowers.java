@@ -4,6 +4,9 @@ import java.util.Arrays;
 
 import graphBuilder.MyLongArrayList;
 
+/**
+ * contains user's Followers
+ */
 public class UserFollowers {
 
 	private long uid;

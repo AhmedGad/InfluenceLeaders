@@ -10,6 +10,10 @@ import java.util.Map.Entry;
 import twitter4j.Status;
 import twitter4j.URLEntity;
 
+/**
+ * read status files in efficient way
+ *
+ */
 public class StatusReader {
 
 	static byte[] bytes = new byte[200000000];

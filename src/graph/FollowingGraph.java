@@ -2,6 +2,10 @@ package graph;
 
 import cache.UsersLRUcache;
 
+/**
+ *	the Graph Class that implements Graph interface 
+ */
+
 public class FollowingGraph implements Graph {
 	public String dir;
 	private UsersLRUcache cache;
@@ -20,7 +24,7 @@ public class FollowingGraph implements Graph {
 	/**
 	 * @return true if u1 is following u2
 	 * @throws Exception
-	 *             if u2 is not exists
+	 *            if u2 doesn't exist
 	 */
 	@Override
 	public boolean isFollowing(long u1, long u2) throws Exception {

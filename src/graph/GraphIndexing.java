@@ -16,6 +16,17 @@ import java.io.ObjectOutputStream;
 import java.util.HashSet;
 import java.util.StringTokenizer;
 
+/**
+ * Given the Graph files this class will extract every user as a file that contains all followers for this user<br>
+ * the input for this class is : <br>
+ * <ul>
+ * <li> graphDir : the directory of graph files.</li>
+ * <li> indexedDir : the directory of the output files, the files that will contain every user's follower list.</li>
+ * <li> setDir : directory of the HashSet that contains graph files names, because in case the class stop don't begin the
+ * whole process again just begin from the last file, it can be any directory <br> 
+ * the HashSet file will be created after the first run</li>
+ * </ul>
+ */
 public class GraphIndexing {
 
 	static byte[] bytes = new byte[600000000];
@@ -24,14 +35,14 @@ public class GraphIndexing {
 	public final static int NEW_USER = 1;
 	public final static int FIRST_LINE_AFTER_NEW_USER = 2;
 	public final static String indexedDir = "/media/hanafy/New Volume/Lectures/4th year/GP/Data Collected/Indexed/";
-	public final static String setsDir = "/media/hanafy/New Volume/Lectures/4th year/GP/Data Collected/";
+	public final static String setDir = "/media/hanafy/New Volume/Lectures/4th year/GP/Data Collected/";
 	public final static String graphDir = "/media/hanafy/New Volume/Lectures/4th year/GP/Data Collected/Graph";
 
 	@SuppressWarnings("resource")
 	public static void main(String[] args) throws Exception {
 		File inputFile = new File(graphDir);
 
-		HashSet<String> fileSet = readHashSet(setsDir);
+		HashSet<String> fileSet = readHashSet(setDir);
 		for (File f : inputFile.listFiles()) {
 			if (f.getName().startsWith("graph") && f.getName().endsWith(".txt") && !fileSet.contains(f.getName())) {
 				System.out.println(f.getAbsolutePath());
@@ -87,7 +98,7 @@ public class GraphIndexing {
 
 				// write HashSet
 				fileSet.add(f.getName());
-				writeHashSet(fileSet, setsDir);
+				writeHashSet(fileSet, setDir);
 			}
 		}
 

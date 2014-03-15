@@ -16,6 +16,10 @@ import twitter4j.TwitterStreamFactory;
 import twitter4j.conf.Configuration;
 import twitter4j.conf.ConfigurationBuilder;
 
+/**
+ * get Stream from twitter<br>
+ * can get stream or track some words
+ */
 public final class PrintSampleStream {
 
 	static Object lock = new Object();

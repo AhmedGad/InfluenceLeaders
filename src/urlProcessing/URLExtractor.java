@@ -19,7 +19,11 @@ import cache.LRUcache;
 
 import twitter4j.Status;
 import twitter4j.URLEntity;
-
+/**
+ * Extracts URL files from tweets files<br>
+ * each URL file contains list of users that mentioned this url sorted by time<br>
+ * Given tweets directory (input) and URL directory (output)
+ */
 public class URLExtractor {
 
 	private static byte[] bytes = new byte[200000000];

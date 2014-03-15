@@ -10,9 +10,16 @@ import java.util.TreeSet;
 
 import twitter4j.Status;
 
+/**
+ * Extracts UserIds from tweets files<br>
+ * given status directory (input) and UserIds directory (output)
+ */
 public class UserIdExtractor {
+	public final static String statusPath = "./Status/";
+	public final static String UserIdsPath = "./UserIds/";
+
 	public static void main(String[] args) throws IOException, ClassNotFoundException {
-		File statusDir = new File("./Status");
+		File statusDir = new File(statusPath);
 		File[] files = statusDir.listFiles();
 		TreeSet<Long> idSet = new TreeSet<Long>();
 		long total = 0;
@@ -22,8 +29,8 @@ public class UserIdExtractor {
 
 			FileInputStream fin = new FileInputStream(files[i]);
 			ObjectInputStream ois = new ObjectInputStream(fin);
-			BufferedWriter bw = new BufferedWriter(new FileWriter("./UserIds/userID @ " + System.currentTimeMillis()
-					+ ".txt"));
+			BufferedWriter bw = new BufferedWriter(new FileWriter(UserIdsPath + "userID @ "
+					+ System.currentTimeMillis() + ".txt"));
 
 			while (true) {
 				try {
