@@ -8,6 +8,8 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.util.HashSet;
 
+import DataSummary.UserData;
+
 import twitter4j.Status;
 import twitter4j.User;
 
@@ -28,8 +30,8 @@ public class UsersWriter {
 	 */
 	public int writeUsers() throws IOException {
 		set = new HashSet<Long>();
-		ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(
-				outputFile));
+		FileOutputStream fout = new FileOutputStream(outputFile);
+		ObjectOutputStream oos = new ObjectOutputStream(fout);
 		for (File file : fileList) {
 			System.out.println(file.getAbsolutePath());
 			ObjectInputStream ois = new ObjectInputStream(new FileInputStream(
@@ -38,15 +40,20 @@ public class UsersWriter {
 				try {
 					User user = ((Status) ois.readObject()).getUser();
 					if (!set.contains(user.getId())) {
+						UserData u = new UserData(user.getId(),user.getFollowersCount(), user.getFriendsCount(), user.getCreatedAt());
 						set.add(user.getId());
-						oos.writeObject(user);
+						oos.writeObject(u);
 						if (set.size() % 10000 == 0) {
+							oos.flush();
 							oos.reset();
-							System.out.println(set.size() + " users written.");
 						}
-						if (set.size() == 250000) {
-							oos.close();
-							System.exit(0);
+						if (set.size() % 100000 == 0) {
+//							oos.close();
+//							fout.close();
+//
+//							fout = new FileOutputStream(outputFile);
+//							oos = new ObjectOutputStream(fout);
+							System.out.println("Finished "+set.size());
 						}
 					}
 				} catch (Exception e) {
@@ -55,13 +62,15 @@ public class UsersWriter {
 				}
 			}
 		}
+		oos.flush();
 		oos.close();
+		System.out.println(set.size());
 		return set.size();
 	}
 
 	public static void main(String[] args) throws IOException {
-		UsersWriter uw = new UsersWriter(new File("./status").listFiles(),
-				new File("users"));
+		UsersWriter uw = new UsersWriter(new File("./Status").listFiles(),
+				new File("UserObjects"));
 		System.out.println(uw.writeUsers());
 	}
 }

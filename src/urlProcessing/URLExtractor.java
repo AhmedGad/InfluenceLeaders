@@ -52,8 +52,7 @@ public class URLExtractor {
 				int size = dis.available();
 				System.out.println(size + " " + dis.read(bytes));
 
-				ObjectInputStream ois = new ObjectInputStream(
-						new ByteArrayInputStream(bytes));
+				ObjectInputStream ois = new ObjectInputStream(new ByteArrayInputStream(bytes));
 
 				try {
 					while (true) {
