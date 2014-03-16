@@ -6,8 +6,10 @@ import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.InputStreamReader;
+import java.util.HashSet;
 import java.util.StringTokenizer;
 
 /**
@@ -28,20 +30,39 @@ public class GraphIndexing {
 
 	static byte[] bytes = new byte[800000000];
 
-	public final static int READ_FOLLOWERS = 0;
-	public final static int NEW_USER = 1;
-	public final static int FIRST_LINE_AFTER_NEW_USER = 2;
-	public final static String indexedDir = "./Users/";
-	public final static String graphDir = "./Graph/";
+	private final static int READ_FOLLOWERS = 0;
+	private final static int NEW_USER = 1;
+	private final static int FIRST_LINE_AFTER_NEW_USER = 2;
+	private final static String indexedDir = "./Users/";
+	private final static String graphDir = "./Graph/";
+	private final static File finished = new File("./Users/finished");
+	private final static HashSet<String> finishedSet = new HashSet<String>();
 
 	public static void main(String[] args) throws Exception {
+
 		File inputFile = new File(graphDir);
 		BufferedWriter errorLog = new BufferedWriter(new FileWriter(new File(
 				"errorlog.txt")));
+		if (!finished.exists()) {
+			finished.createNewFile();
+		}
+
+		BufferedReader finishedReader = new BufferedReader(new FileReader(
+				finished));
+		String s;
+		while ((s = finishedReader.readLine()) != null) {
+			finishedSet.add(s);
+		}
+		finishedReader.close();
+
+		BufferedWriter finishedWriter = new BufferedWriter(new FileWriter(
+				finished, true));
 
 		for (File f : inputFile.listFiles()) {
-			if (f.getName().startsWith("graph") && f.getName().endsWith(".txt")) {
+			if (f.getName().startsWith("graph") && f.getName().endsWith(".txt")
+					&& !finishedSet.contains(f.getName())) {
 				System.out.println(f.getAbsolutePath());
+				boolean ok = true;
 
 				int state = NEW_USER;
 				int NumUsers = 0;
@@ -57,6 +78,7 @@ public class GraphIndexing {
 					errorLog.write(f.getAbsolutePath() + " loaded: " + loaded
 							+ " total Size: " + size + "\n");
 					errorLog.flush();
+					ok = false;
 				}
 
 				ByteArrayInputStream in = new ByteArrayInputStream(bytes, 0,
@@ -67,7 +89,7 @@ public class GraphIndexing {
 				BufferedWriter writer = null;
 
 				while (true) {
-					String s = buff.readLine();
+					s = buff.readLine();
 					if (s == null) {
 						if (writer != null)
 							writer.close();
@@ -92,17 +114,20 @@ public class GraphIndexing {
 							errorLog.write(f.getAbsolutePath() + "\t"
 									+ "\"followers:\" word not found!!"
 									+ "\tcur line: " + s + "\n");
+							ok = false;
 						}
 						state++;
 					} else if (state == FIRST_LINE_AFTER_NEW_USER) {
-						if (s.length() > 0)
+						if (s.length() > 0) {
 							System.err
 									.println(f.getAbsolutePath()
 											+ "\tfirst line is not empty!!!!\tcur line: "
 											+ s);
-						errorLog.write(f.getAbsolutePath()
-								+ "\tfirst line is not empty!!!!\tcur line: "
-								+ s + "\n");
+							errorLog.write(f.getAbsolutePath()
+									+ "\tfirst line is not empty!!!!\tcur line: "
+									+ s + "\n");
+							ok = false;
+						}
 						state = 0;
 					}
 				}
@@ -111,9 +136,14 @@ public class GraphIndexing {
 				dis.close();
 				System.out.println(NumUsers + " "
 						+ (System.currentTimeMillis() - t1));
+				if (ok) {
+					finishedWriter.write(f.getName());
+					finishedWriter.flush();
+				}
 			}
 		}
 
+		finishedWriter.close();
 		errorLog.close();
 		System.out.println("Finished");
 	}
