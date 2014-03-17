@@ -11,6 +11,8 @@ import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.Map.Entry;
@@ -30,13 +32,13 @@ public class URLExtractor {
 
 	private static byte[] bytes = new byte[800000000];
 	private static LRU<String, ArrayList<String>> urlSet;
-	private final static int MAX_SIZE = 50;
+	private final static int MAX_SIZE = 1200;
 	private final static String inDirectory = "./Status";
 	private final static String outDirectory = "./URLs/";
 	private static HashMap<String, String> urlMap;
 
 	public static void main(String[] args) throws Exception {
-		urlSet = new LRUcache<String, ArrayList<String>>(10000);
+		urlSet = new LRUcache<String, ArrayList<String>>(150000);
 		urlMap = readHashMap(inDirectory + "/urlMap");
 
 		File dir = new File(inDirectory);
@@ -46,6 +48,13 @@ public class URLExtractor {
 		int statusCnt = 0;
 
 		File[] lista = dir.listFiles();
+		// sorting in time so that the data is sorted in time
+		Arrays.sort(lista, new Comparator<File>() {
+			@Override
+			public int compare(File o1, File o2) {
+				return o1.getName().compareTo(o2.getName());
+			}
+		});
 		System.out.println("Number of files : " + lista.length);
 		for (File f : lista) {
 			if (f.getName().endsWith(".txt")) {
@@ -55,7 +64,7 @@ public class URLExtractor {
 				DataInputStream dis = new DataInputStream(
 						fis = new FileInputStream(f));
 				int size = dis.available();
-				// System.out.println(size + " " + dis.read(bytes));
+				dis.read(bytes);
 
 				ObjectInputStream ois = new ObjectInputStream(
 						new ByteArrayInputStream(bytes));
