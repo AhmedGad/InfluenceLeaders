@@ -28,7 +28,7 @@ import java.util.StringTokenizer;
  */
 public class GraphIndexing {
 
-	static byte[] bytes = new byte[800000000];
+	static byte[] bytes = new byte[80000];
 
 	private final static int READ_FOLLOWERS = 0;
 	private final static int NEW_USER = 1;
@@ -39,7 +39,11 @@ public class GraphIndexing {
 	private final static HashSet<String> finishedSet = new HashSet<String>();
 
 	public static void main(String[] args) throws Exception {
-
+		File dd = new File(indexedDir);
+		File[] xx = dd.listFiles();
+		System.out.println(xx.length);
+		System.exit(0);
+		
 		File inputFile = new File(graphDir);
 		BufferedWriter errorLog = new BufferedWriter(new FileWriter(new File(
 				"errorlog.txt")));
@@ -137,7 +141,7 @@ public class GraphIndexing {
 				System.out.println(NumUsers + " "
 						+ (System.currentTimeMillis() - t1));
 				if (ok) {
-					finishedWriter.write(f.getName());
+					finishedWriter.write(f.getName() + "\n");
 					finishedWriter.flush();
 				}
 			}

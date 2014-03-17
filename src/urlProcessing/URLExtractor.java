@@ -1,4 +1,5 @@
 package urlProcessing;
+
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.File;
@@ -19,6 +20,7 @@ import cache.LRUcache;
 
 import twitter4j.Status;
 import twitter4j.URLEntity;
+
 /**
  * Extracts URL files from tweets files<br>
  * each URL file contains list of users that mentioned this url sorted by time<br>
@@ -26,7 +28,7 @@ import twitter4j.URLEntity;
  */
 public class URLExtractor {
 
-	private static byte[] bytes = new byte[200000000];
+	private static byte[] bytes = new byte[800000000];
 	private static LRU<String, ArrayList<String>> urlSet;
 	private final static int MAX_SIZE = 50;
 	private final static String inDirectory = "./Status";
@@ -43,26 +45,26 @@ public class URLExtractor {
 		int hit = 0, miss = 0, totalURLs = 0, removed = 0, reachMax = 0;
 		int statusCnt = 0;
 
-		for (File f : dir.listFiles()) {
+		File[] lista = dir.listFiles();
+		System.out.println("Number of files : " + lista.length);
+		for (File f : lista) {
 			if (f.getName().endsWith(".txt")) {
 				cnt++;
+				System.out.println(cnt + " Read File : " + f.getName());
 				FileInputStream fis;
 				DataInputStream dis = new DataInputStream(
 						fis = new FileInputStream(f));
 				int size = dis.available();
-				System.out.println(size + " " + dis.read(bytes));
+				// System.out.println(size + " " + dis.read(bytes));
 
-				ObjectInputStream ois = new ObjectInputStream(new ByteArrayInputStream(bytes));
+				ObjectInputStream ois = new ObjectInputStream(
+						new ByteArrayInputStream(bytes));
 
 				try {
 					while (true) {
-						statusCnt++;
-						if (statusCnt % 1000 == 0)
-							System.out.println(statusCnt);
-
 						Status status = (Status) ois.readObject();
+						statusCnt++;
 						URLEntity[] urlEntity = status.getURLEntities();
-						// System.out.println(xx++);
 
 						for (int i = 0; i < urlEntity.length; i++) {
 							totalURLs++;
@@ -109,9 +111,6 @@ public class URLExtractor {
 				}
 				fis.close();
 				dis.close();
-
-				if (cnt == 1)
-					break;
 
 				writeHashMap(inDirectory + "/urlMap", urlMap);
 			}
