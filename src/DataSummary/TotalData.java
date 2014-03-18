@@ -4,16 +4,19 @@ import graph.FollowingGraph;
 import graph.Graph;
 
 import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
+import java.io.DataInputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.StringTokenizer;
 import java.util.TreeMap;
 import java.util.Map.Entry;
-import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -31,15 +34,18 @@ public class TotalData {
 	private final static ConcurrentHashMap<Long, UserNode> tr = new ConcurrentHashMap<Long, UserNode>();
 	private static AtomicInteger done = new AtomicInteger(0);
 	private static final int NUM_THREADS = 20;
-	private static final int MAX_FOLLOWERS_CACHED = 200000000;
-	private static final ArrayBlockingQueue<Graph> graphs = new ArrayBlockingQueue<Graph>(
-			NUM_THREADS + 1);
+	private static final int MAX_FOLLOWERS_CACHED = 400000000;
+	// private static final ArrayBlockingQueue<Graph> graphs = new
+	// ArrayBlockingQueue<Graph>(
+	// NUM_THREADS + 1);
+	private static final FollowingGraph graph = new FollowingGraph(
+			usersDirectory, MAX_FOLLOWERS_CACHED);
 
 	public static void main(String[] args) throws Exception {
 		File dir = new File(urlsDir);
-		for (int i = 0; i < NUM_THREADS; i++)
-			graphs.add(new FollowingGraph(usersDirectory, MAX_FOLLOWERS_CACHED
-					/ NUM_THREADS));
+		// for (int i = 0; i < NUM_THREADS; i++)
+		// graphs.add(new FollowingGraph(usersDirectory, MAX_FOLLOWERS_CACHED
+		// / NUM_THREADS));
 		System.out.println("Total Files: " + dir.listFiles().length);
 		ExecutorService executor = Executors.newFixedThreadPool(NUM_THREADS);
 		for (File f : dir.listFiles()) {
@@ -130,26 +136,44 @@ public class TotalData {
 
 	static class Task implements Runnable {
 		File f;
-		Graph graph;
+
+		// make this smaller when the date is removed from the URLs files
+		private static int MAX_FILE_SIZE = 50000;
+
+		// Graph graph;
 
 		public Task(File f) {
 			this.f = f;
 		}
 
+		public ArrayList<String> readData(DataInputStream dis)
+				throws IOException {
+			byte[] bytes = new byte[MAX_FILE_SIZE];
+			int size = dis.available(), loaded = dis.read(bytes);
+			if (size != loaded && loaded > 0) {
+				// file is too big to be processed
+				return null;
+			}
+			ByteArrayInputStream in = new ByteArrayInputStream(bytes, 0, size);
+			BufferedReader buff = new BufferedReader(new InputStreamReader(in));
+			ArrayList<String> lines = new ArrayList<String>();
+			while (true) {
+				String s = buff.readLine();
+				if (s == null)
+					break;
+				lines.add(s);
+			}
+			return lines;
+		}
+
 		@Override
 		public void run() {
-			BufferedReader in = null;
+			DataInputStream dis = null;
 			try {
-				graph = graphs.poll();
-				ArrayList<String> lines = new ArrayList<String>();
-				in = new BufferedReader(new FileReader(f));
-				while (true) {
-					String s = in.readLine();
-					if (s == null)
-						break;
-					lines.add(s);
-				}
-				if (lines.size() > 2000) {
+				// graph = graphs.poll();
+				dis = new DataInputStream(new FileInputStream(f));
+				ArrayList<String> lines = readData(dis);
+				if (lines == null || lines.size() > 1500) {
 					System.out.println("Ignoring file " + f.getName()
 							+ " with size " + lines.size());
 					return;
@@ -228,17 +252,23 @@ public class TotalData {
 				}
 				int d = done.incrementAndGet();
 				if (d % 1000 == 0) {
+					System.out.println("MISS " + graph.cache.getMissCnt() + "/"
+							+ graph.cache.getTotalCnt());
+					System.out.println("cahced Users "
+							+ graph.cache.getCachedUsers());
+					System.out.println("Done Files: " + done);
+					System.out.println("Cached Capacity: "
+							+ graph.cache.getCacheSize());
 					System.out.println("Finished Files: " + done);
 				}
 			} catch (Exception e) {
 				e.printStackTrace();
 			} finally {
-				if (graph != null)
-					graphs.add(graph);
+				// if (graph != null)
+				// graphs.add(graph);
 
 				try {
-					if (in != null)
-						in.close();
+					dis.close();
 				} catch (IOException e) {
 					e.printStackTrace();
 				}

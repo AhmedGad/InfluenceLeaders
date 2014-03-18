@@ -4,13 +4,14 @@ import graph.UserFollowers;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.HashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class UsersLRUcache {
 	private int capacity, initCap;
 	AtomicInteger missCnt, total;
-	ConcurrentHashMap<Long, UserFollowers> hashMap;
+	HashMap<Long, UserFollowers> hashMap;
 	Deque<Long> dequeue;
 
 	/**
@@ -22,13 +23,13 @@ public class UsersLRUcache {
 		this.capacity = capacity;
 		initCap = capacity;
 		dequeue = new ArrayDeque<Long>();
-		hashMap = new ConcurrentHashMap<Long, UserFollowers>();
+		hashMap = new HashMap<Long, UserFollowers>();
 		missCnt = new AtomicInteger(0);
 		total = new AtomicInteger(0);
 	}
 
 	public synchronized void add(Long key, UserFollowers value) {
-		if (!hashMap.contains(key)) {
+		if (!hashMap.containsKey(key)) {
 			hashMap.put(key, value);
 			dequeue.addFirst(key);
 			capacity -= value.size();

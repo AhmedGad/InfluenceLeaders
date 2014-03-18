@@ -28,7 +28,7 @@ import java.util.StringTokenizer;
  */
 public class GraphIndexing {
 
-	static byte[] bytes = new byte[80000];
+	static byte[] bytes = new byte[800000000];
 
 	private final static int READ_FOLLOWERS = 0;
 	private final static int NEW_USER = 1;

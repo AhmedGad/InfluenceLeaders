@@ -11,7 +11,7 @@ import cache.UsersLRUcache;
 
 public class FollowingGraph implements Graph {
 	public String dir;
-	private UsersLRUcache cache;
+	public UsersLRUcache cache;
 	private HashSet<Long> usersSet;
 
 	public FollowingGraph(String dir, int cacheSize) {
