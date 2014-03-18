@@ -98,8 +98,7 @@ public class URLExtractor {
 								hit++;
 							}
 
-							String str = status.getUser().getId() + ":"
-									+ status.getCreatedAt().toString();
+							String str = status.getUser().getId()+":";
 							list.add(str);
 							if (list.size() >= MAX_SIZE) {
 								reachMax++;

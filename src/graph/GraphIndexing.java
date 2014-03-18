@@ -39,11 +39,6 @@ public class GraphIndexing {
 	private final static HashSet<String> finishedSet = new HashSet<String>();
 
 	public static void main(String[] args) throws Exception {
-		File dd = new File(indexedDir);
-		File[] xx = dd.listFiles();
-		System.out.println(xx.length);
-		System.exit(0);
-		
 		File inputFile = new File(graphDir);
 		BufferedWriter errorLog = new BufferedWriter(new FileWriter(new File(
 				"errorlog.txt")));

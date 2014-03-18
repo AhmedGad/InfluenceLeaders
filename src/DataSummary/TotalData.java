@@ -7,11 +7,19 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.StringTokenizer;
 import java.util.TreeMap;
 import java.util.Map.Entry;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import twitter4j.User;
 
@@ -21,15 +29,112 @@ public class TotalData {
 
 	private final static String urlsDir = "./URLs";
 	private final static String outDirectory = "./Final/";
-	private final static TreeMap<Long, UserNode> tr = new TreeMap<Long, UserNode>();
+	private final static ConcurrentHashMap<Long, UserNode> tr = new ConcurrentHashMap<Long, UserNode>();
+	private static Graph graph;
+	private static AtomicInteger done = new AtomicInteger(0);
+	private static final int NUM_THREADS = 20;
 
 	public static void main(String[] args) throws Exception {
 		File dir = new File(urlsDir);
-		Graph graph = new FollowingGraph("./Graph/");
+		graph = new FollowingGraph("./Users/");
 		System.out.println("Total Files: " + dir.listFiles().length);
-		int done = 0;
-		HashSet<Long> hs = new HashSet<Long>();
+		ExecutorService executor = Executors.newFixedThreadPool(NUM_THREADS);
 		for (File f : dir.listFiles()) {
+			Task task = new Task(f);
+			executor.execute(task);
+		}
+		executor.shutdown();
+		executor.awaitTermination(48, TimeUnit.HOURS);
+		System.out.println(tr.size());
+		UsersReader reader = UsersReader.getInstance();
+		FileWriter fw = new FileWriter(outDirectory + "TotalData.txt", false);
+		for (Entry<Long, UserNode> e : tr.entrySet()) {
+			UserData u = reader.getUser(e.getKey());
+			if (u != null && e.getValue().minLocalInf != Integer.MAX_VALUE) {
+				StringBuilder sb = new StringBuilder();
+				sb.append(u.followers + ",");
+				sb.append(u.friends + ",");
+				sb.append(e.getValue().tweets + ",");
+				sb.append(u.dateJoined + ",");
+				sb.append(e.getValue().totalInfSum.floatValue()
+						/ e.getValue().tweets.floatValue() + ",");
+				sb.append(e.getValue().minTotalInf + ",");
+				sb.append(e.getValue().maxTotalInf + ",");
+
+				sb.append(e.getValue().localInfSum.floatValue()
+						/ e.getValue().tweets.floatValue() + ",");
+				sb.append(e.getValue().minLocalInf + ",");
+				sb.append(e.getValue().maxLocalInf + "\n");
+				fw.write(sb.toString());
+			}
+		}
+		fw.close();
+	}
+
+	static class UserNode {
+		private Semaphore s1, s2, s3, s4;
+
+		public UserNode() {
+			s1 = new Semaphore(1);
+			s2 = new Semaphore(1);
+			s3 = new Semaphore(1);
+			s4 = new Semaphore(1);
+			tweets = new AtomicInteger(0);
+			totalInfSum = new AtomicInteger(0);
+			localInfSum = new AtomicInteger(0);
+		}
+
+		// total number of tweets ( different urls posted )
+		AtomicInteger tweets;
+		// average total is totalInfSum/tweets
+		AtomicInteger totalInfSum;
+		// average local is localInfSum/tweets
+		AtomicInteger localInfSum;
+
+		int minTotalInf = Integer.MAX_VALUE;
+		int minLocalInf = Integer.MAX_VALUE;
+
+		int maxTotalInf = Integer.MIN_VALUE;
+		int maxLocalInf = Integer.MIN_VALUE;
+
+		public void updateMinTotalInf(int x) throws InterruptedException {
+			s1.acquire();
+			if (minTotalInf > x)
+				minTotalInf = x;
+			s1.release();
+		}
+
+		public void updateMaxTotalInf(int x) throws InterruptedException {
+			s2.acquire();
+			if (maxTotalInf < x)
+				maxTotalInf = x;
+			s2.release();
+		}
+
+		public void updateMinLocalInf(int x) throws InterruptedException {
+			s3.acquire();
+			if (minLocalInf > x)
+				minLocalInf = x;
+			s3.release();
+		}
+
+		public void updateMaxLocalInf(int x) throws InterruptedException {
+			s4.acquire();
+			if (maxLocalInf < x)
+				maxLocalInf = x;
+			s4.release();
+		}
+	}
+
+	static class Task implements Runnable {
+		File f;
+
+		public Task(File f) {
+			this.f = f;
+		}
+
+		@Override
+		public void run() {
 			BufferedReader in = null;
 			try {
 				ArrayList<String> lines = new ArrayList<String>();
@@ -43,7 +148,7 @@ public class TotalData {
 				if (lines.size() > 2000) {
 					System.out.println("Ignoring file " + f.getName()
 							+ " with size " + lines.size());
-					continue;
+					return;
 				}
 				HashSet<Long> completedUsers = new HashSet<Long>();
 				TreeMap<Long, Integer> local = new TreeMap<Long, Integer>();
@@ -52,11 +157,13 @@ public class TotalData {
 				for (int i = 0; i < lines.size(); i++) {
 					StringTokenizer st = new StringTokenizer(lines.get(i), ":");
 					long fromId = Long.parseLong(st.nextToken());
-					hs.add(fromId);
+					if (!graph.exists(fromId))
+						continue;
+
 					if (!completedUsers.contains(fromId)) {
 						if (!tr.containsKey(fromId))
 							tr.put(fromId, new UserNode());
-						tr.get(fromId).tweets++;
+						tr.get(fromId).tweets.incrementAndGet();
 						completedUsers.add(fromId);
 					} else
 						continue; // Ignore repetitions
@@ -79,7 +186,6 @@ public class TotalData {
 						}
 						// follow is always false !!!
 						if (follow) {
-							System.out.println(follow);
 							parent.put(toId, fromId);
 							if (!local.containsKey(fromId))
 								local.put(fromId, 0);
@@ -103,68 +209,34 @@ public class TotalData {
 					if (!tr.containsKey(e.getKey()))
 						tr.put(e.getKey(), new UserNode());
 					UserNode u = tr.get(e.getKey());
-					u.localInfSum = e.getValue();
-					u.totalInfSum = e.getValue();
-					u.minLocalInf = Math.min(u.minLocalInf, e.getValue());
-					u.maxLocalInf = Math.max(u.maxLocalInf, e.getValue());
+					u.localInfSum.addAndGet(e.getValue());
+					u.totalInfSum.addAndGet(e.getValue());
+					u.updateMinLocalInf(e.getValue());
+					u.updateMaxLocalInf(e.getValue());
 				}
 				for (Entry<Long, Integer> e : total.entrySet()) {
 					if (!tr.containsKey(e.getKey()))
 						tr.put(e.getKey(), new UserNode());
 					UserNode u = tr.get(e.getKey());
-					u.totalInfSum += e.getValue();
-					u.minTotalInf = Math.min(u.minTotalInf, e.getValue());
-					u.maxTotalInf = Math.max(u.maxTotalInf, e.getValue());
+					u.totalInfSum.addAndGet(e.getValue());
+					u.updateMinTotalInf(e.getValue());
+					u.updateMaxTotalInf(e.getValue());
 				}
-				done++;
-				if (done % 1000 == 0) {
+				int d = done.incrementAndGet();
+				if (d % 1000 == 0) {
 					System.out.println("Finished Files: " + done);
 				}
 			} catch (Exception e) {
 				e.printStackTrace();
 			} finally {
 				if (in != null)
-					in.close();
+					try {
+						in.close();
+					} catch (IOException e) {
+						e.printStackTrace();
+					}
 			}
 		}
-		System.out.println(tr.size());
-		UsersReader reader = UsersReader.getInstance();
-		FileWriter fw = new FileWriter(outDirectory + "TotalData.txt", false);
-		for (Entry<Long, UserNode> e : tr.entrySet()) {
-			UserData u = reader.getUser(e.getKey());
-			if (u != null) {
-				StringBuilder sb = new StringBuilder();
-				sb.append(u.followers + ",");
-				sb.append(u.friends + ",");
-				sb.append(e.getValue().tweets + ",");
-				sb.append(u.dateJoined + ",");
-				sb.append((float) e.getValue().totalInfSum
-						/ e.getValue().tweets + ",");
-				sb.append(e.getValue().minTotalInf + ",");
-				sb.append(e.getValue().maxTotalInf + ",");
 
-				sb.append((float) e.getValue().localInfSum
-						/ e.getValue().tweets + ",");
-				sb.append(e.getValue().minLocalInf + ",");
-				sb.append(e.getValue().maxLocalInf + "\n");
-				fw.write(sb.toString());
-			}
-		}
-		fw.close();
-	}
-
-	static class UserNode {
-		// total number of tweets ( different urls posted )
-		int tweets = 0;
-		// average total is totalInfSum/tweets
-		int totalInfSum = 0;
-		// average local is localInfSum/tweets
-		int localInfSum = 0;
-
-		int minTotalInf = Integer.MAX_VALUE;
-		int minLocalInf = Integer.MAX_VALUE;
-
-		int maxTotalInf = Integer.MIN_VALUE;
-		int maxLocalInf = Integer.MIN_VALUE;
 	}
 }
