@@ -9,11 +9,11 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.StringTokenizer;
 import java.util.TreeMap;
 import java.util.Map.Entry;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -21,22 +21,25 @@ import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import twitter4j.User;
-
 import Tweets.UsersReader;
 
 public class TotalData {
 
 	private final static String urlsDir = "./URLs";
 	private final static String outDirectory = "./Final/";
+	private final static String usersDirectory = "./Users/";
 	private final static ConcurrentHashMap<Long, UserNode> tr = new ConcurrentHashMap<Long, UserNode>();
-	private static Graph graph;
 	private static AtomicInteger done = new AtomicInteger(0);
 	private static final int NUM_THREADS = 20;
+	private static final int MAX_FOLLOWERS_CACHED = 200000000;
+	private static final ArrayBlockingQueue<Graph> graphs = new ArrayBlockingQueue<Graph>(
+			NUM_THREADS + 1);
 
 	public static void main(String[] args) throws Exception {
 		File dir = new File(urlsDir);
-		graph = new FollowingGraph("./Users/");
+		for (int i = 0; i < NUM_THREADS; i++)
+			graphs.add(new FollowingGraph(usersDirectory, MAX_FOLLOWERS_CACHED
+					/ NUM_THREADS));
 		System.out.println("Total Files: " + dir.listFiles().length);
 		ExecutorService executor = Executors.newFixedThreadPool(NUM_THREADS);
 		for (File f : dir.listFiles()) {
@@ -72,13 +75,12 @@ public class TotalData {
 	}
 
 	static class UserNode {
-		private Semaphore s1, s2, s3, s4;
+		private static Semaphore s1 = new Semaphore(1);
+		private static Semaphore s2 = new Semaphore(1);
+		private static Semaphore s3 = new Semaphore(1);
+		private static Semaphore s4 = new Semaphore(1);
 
 		public UserNode() {
-			s1 = new Semaphore(1);
-			s2 = new Semaphore(1);
-			s3 = new Semaphore(1);
-			s4 = new Semaphore(1);
 			tweets = new AtomicInteger(0);
 			totalInfSum = new AtomicInteger(0);
 			localInfSum = new AtomicInteger(0);
@@ -128,6 +130,7 @@ public class TotalData {
 
 	static class Task implements Runnable {
 		File f;
+		Graph graph;
 
 		public Task(File f) {
 			this.f = f;
@@ -137,6 +140,7 @@ public class TotalData {
 		public void run() {
 			BufferedReader in = null;
 			try {
+				graph = graphs.poll();
 				ArrayList<String> lines = new ArrayList<String>();
 				in = new BufferedReader(new FileReader(f));
 				while (true) {
@@ -229,12 +233,15 @@ public class TotalData {
 			} catch (Exception e) {
 				e.printStackTrace();
 			} finally {
-				if (in != null)
-					try {
+				if (graph != null)
+					graphs.add(graph);
+
+				try {
+					if (in != null)
 						in.close();
-					} catch (IOException e) {
-						e.printStackTrace();
-					}
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
 			}
 		}
 

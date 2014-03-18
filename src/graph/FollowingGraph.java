@@ -9,10 +9,11 @@ import cache.UsersLRUcache;
 public class FollowingGraph implements Graph {
 	public String dir;
 	private UsersLRUcache cache;
-	private final static int cacheSize = 200000000;
+	private int cacheSize = 200000000;
 
-	public FollowingGraph(String dir) {
+	public FollowingGraph(String dir, int cacheSize) {
 		this.dir = dir;
+		this.cacheSize = cacheSize;
 		cache = new UsersLRUcache(cacheSize);
 	}
 
