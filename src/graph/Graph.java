@@ -12,7 +12,7 @@ public interface Graph {
 	 *            user ID
 	 * @return true if user exists, false if not
 	 */
-	public boolean exists(long uid);
+	public boolean exists(Long uid);
 
 	/**
 	 * 
