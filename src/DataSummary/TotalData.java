@@ -33,7 +33,7 @@ public class TotalData {
 	private final static String usersDirectory = "./Users/";
 	private final static ConcurrentHashMap<Long, UserNode> tr = new ConcurrentHashMap<Long, UserNode>();
 	private static AtomicInteger done = new AtomicInteger(0);
-	private static final int NUM_THREADS = 20;
+	private static final int NUM_THREADS = 25;
 	private static final int MAX_FOLLOWERS_CACHED = 400000000;
 	// private static final ArrayBlockingQueue<Graph> graphs = new
 	// ArrayBlockingQueue<Graph>(
@@ -173,7 +173,9 @@ public class TotalData {
 				// graph = graphs.poll();
 				dis = new DataInputStream(new FileInputStream(f));
 				ArrayList<String> lines = readData(dis);
-				if (lines == null || lines.size() > 1500) {
+				if (lines == null)
+					return;
+				if (lines.size() > 1500) {
 					System.out.println("Ignoring file " + f.getName()
 							+ " with size " + lines.size());
 					return;
@@ -260,6 +262,7 @@ public class TotalData {
 					System.out.println("Cached Capacity: "
 							+ graph.cache.getCacheSize());
 					System.out.println("Finished Files: " + done);
+					System.out.println("Total users in tree " + tr.size());
 				}
 			} catch (Exception e) {
 				e.printStackTrace();
