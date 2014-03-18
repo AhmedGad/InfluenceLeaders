@@ -1,43 +1,34 @@
 package cache;
 
 import graph.UserFollowers;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedDeque;
 
-import java.util.Map.Entry;
+public class UsersLRUcache {
+	private int capacity;
+	ConcurrentHashMap<Long, UserFollowers> hm;
+	ConcurrentLinkedDeque<Long> queue;
 
-public class UsersLRUcache extends LRUcache<Long, UserFollowers> {
 	/**
 	 * 
 	 * @param capacity
 	 *            Maximum total number of followers in the cache
 	 */
 	public UsersLRUcache(int capacity) {
-		super(capacity);
+		this.capacity = capacity;
+		queue = new ConcurrentLinkedDeque<Long>();
+		hm = new ConcurrentHashMap<Long, UserFollowers>();
 	}
 
-	@Override
-	public Entry<Long, UserFollowers> add(Long key, UserFollowers value) {
-		if (tr.containsKey(key)) {
-			Node n = ls.remove(tr.get(key));
-			ls.add(n);
-			n.value = value;
-		} else {
-			Node n = new Node(key, value);
-			ls.add(n);
-			tr.put(key, n);
-			while (value.size() > size) {
-				n = tr.remove(ls.removeLast().key);
-				size += n.value.size();
-			}
-			size -= value.size();
+	public void add(Long key, UserFollowers value) {
+		hm.put(key, value);
+		capacity -= value.size();
+		while (capacity < 0) {
+			capacity += hm.remove(queue.removeLast()).size();
 		}
-		return null;
 	}
 
-	@Override
-	public void remove(Long key) {
-		UserFollowers n = super.get(key);
-		size += n.size();
-		super.remove(key);
+	public UserFollowers get(Long key) {
+		return hm.get(key);
 	}
-
 }
