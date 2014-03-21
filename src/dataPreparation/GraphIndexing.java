@@ -1,4 +1,4 @@
-package graph;
+package dataPreparation;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
@@ -28,18 +28,16 @@ import java.util.StringTokenizer;
  */
 public class GraphIndexing {
 
-	static byte[] bytes;
-
+	private byte[] bytes = new byte[800000000];
 	private final static int READ_FOLLOWERS = 0;
 	private final static int NEW_USER = 1;
 	private final static int FIRST_LINE_AFTER_NEW_USER = 2;
-	private final static String indexedDir = "./Users/";
-	private final static String graphDir = "./Graph/";
-	private final static File finished = new File("./Users/finished");
-	private final static HashSet<String> finishedSet = new HashSet<String>();
+	private final String outDir = "./Users/";
+	private final String graphDir = "./Graph/";
+	private final File finished = new File("./Users/finished");
+	private final HashSet<String> finishedSet = new HashSet<String>();
 
-	public static void main(String[] args) throws Exception {
-		bytes = new byte[800000000];
+	public void start() throws Exception {
 		File inputFile = new File(graphDir);
 		BufferedWriter errorLog = new BufferedWriter(new FileWriter(new File(
 				"errorlog.txt")));
@@ -106,7 +104,7 @@ public class GraphIndexing {
 						NumUsers++;
 						StringTokenizer tok = new StringTokenizer(s);
 						writer = new BufferedWriter(new FileWriter(new File(
-								indexedDir + tok.nextToken())));
+								outDir + tok.nextToken())));
 						if (!tok.nextToken().equals("followers:")) {
 							System.err.println(f.getAbsolutePath()
 									+ "\t\"followers:\" word not found!!"
@@ -146,5 +144,10 @@ public class GraphIndexing {
 		finishedWriter.close();
 		errorLog.close();
 		System.out.println("Finished");
+	}
+
+	public static void main(String[] args) throws Exception {
+		GraphIndexing graphIndexing = new GraphIndexing();
+		graphIndexing.start();
 	}
 }
