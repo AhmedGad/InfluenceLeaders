@@ -8,11 +8,17 @@ import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.StringTokenizer;
 import java.util.TreeMap;
@@ -31,29 +37,39 @@ public class TotalData {
 	private final static String urlsDir = "./URLs";
 	private final static String outDirectory = "./Final/";
 	private final static String usersDirectory = "./Users/";
-	private final static ConcurrentHashMap<Long, UserNode> tr = new ConcurrentHashMap<Long, UserNode>();
+	private static ConcurrentHashMap<Long, UserNode> tr;
+	private static ConcurrentHashMap<String, String> finishedFiles;
 	private static AtomicInteger done = new AtomicInteger(0);
-	private static final int NUM_THREADS = 25;
-	private static final int MAX_FOLLOWERS_CACHED = 400000000;
-	// private static final ArrayBlockingQueue<Graph> graphs = new
-	// ArrayBlockingQueue<Graph>(
-	// NUM_THREADS + 1);
-	private static final FollowingGraph graph = new FollowingGraph(
-			usersDirectory, MAX_FOLLOWERS_CACHED);
+	private static final int NUM_THREADS = 20;
+	private static final int MAX_FOLLOWERS_CACHED = 200000000;
+//	 private static final ArrayBlockingQueue<Graph> graphs = new
+//	 ArrayBlockingQueue<Graph>(
+//	 NUM_THREADS + 1);
+	private static final FollowingGraph graph = new FollowingGraph(usersDirectory, MAX_FOLLOWERS_CACHED);
 
 	public static void main(String[] args) throws Exception {
+		finishedFiles = readHashMap("finishedFiles");
+		tr = readUserMap("finishedUsers");
+		System.out.println(finishedFiles.size());
+		System.out.println(tr.size());
 		File dir = new File(urlsDir);
-		// for (int i = 0; i < NUM_THREADS; i++)
-		// graphs.add(new FollowingGraph(usersDirectory, MAX_FOLLOWERS_CACHED
-		// / NUM_THREADS));
+//		for (int i = 0; i < NUM_THREADS; i++)
+//			graphs.add(new FollowingGraph(usersDirectory, MAX_FOLLOWERS_CACHED
+//					/ NUM_THREADS));
 		System.out.println("Total Files: " + dir.listFiles().length);
 		ExecutorService executor = Executors.newFixedThreadPool(NUM_THREADS);
+		int cnt = 0;
 		for (File f : dir.listFiles()) {
+			cnt++;
+			if (finishedFiles.containsKey(f.getName()))
+				continue;
 			Task task = new Task(f);
 			executor.execute(task);
+			if(cnt == 5000)
+				break;
 		}
 		executor.shutdown();
-		executor.awaitTermination(48, TimeUnit.HOURS);
+		executor.awaitTermination(60,TimeUnit.MINUTES);
 		System.out.println(tr.size());
 		UsersReader reader = UsersReader.getInstance();
 		FileWriter fw = new FileWriter(outDirectory + "TotalData.txt", false);
@@ -80,11 +96,60 @@ public class TotalData {
 		fw.close();
 	}
 
-	static class UserNode {
-		private static Semaphore s1 = new Semaphore(1);
-		private static Semaphore s2 = new Semaphore(1);
-		private static Semaphore s3 = new Semaphore(1);
-		private static Semaphore s4 = new Semaphore(1);
+	private static void writeHashMap(String directory, Object map)
+			throws IOException {
+		FileOutputStream fout = new FileOutputStream(directory);
+		ObjectOutputStream oos = new ObjectOutputStream(fout);
+		oos.writeObject(map);
+
+		oos.close();
+		fout.close();
+	}
+
+	private static ConcurrentHashMap<String, String> readHashMap(
+			String directory) throws IOException, ClassNotFoundException {
+		FileInputStream fin;
+		try {
+			fin = new FileInputStream(directory);
+		} catch (FileNotFoundException e) {
+			writeHashMap(directory, new ConcurrentHashMap<String, String>());
+			fin = new FileInputStream(directory);
+		}
+
+		ObjectInputStream ois = new ObjectInputStream(fin);
+		@SuppressWarnings("unchecked")
+		ConcurrentHashMap<String, String> map = (ConcurrentHashMap<String, String>) ois
+				.readObject();
+		ois.close();
+
+		return map;
+	}
+
+	private static ConcurrentHashMap<Long, UserNode> readUserMap(
+			String directory) throws IOException, ClassNotFoundException {
+		FileInputStream fin;
+		try {
+			fin = new FileInputStream(directory);
+		} catch (FileNotFoundException e) {
+			writeHashMap(directory, new ConcurrentHashMap<Long, UserNode>());
+			fin = new FileInputStream(directory);
+		}
+
+		ObjectInputStream ois = new ObjectInputStream(fin);
+		@SuppressWarnings("unchecked")
+		ConcurrentHashMap<Long, UserNode> map = (ConcurrentHashMap<Long, UserNode>) ois
+				.readObject();
+		ois.close();
+
+		return map;
+	}
+
+	private static Semaphore s1 = new Semaphore(1);
+	private static Semaphore s2 = new Semaphore(1);
+	private static Semaphore s3 = new Semaphore(1);
+	private static Semaphore s4 = new Semaphore(1);
+
+	static class UserNode implements Serializable {
 
 		public UserNode() {
 			tweets = new AtomicInteger(0);
@@ -240,7 +305,9 @@ public class TotalData {
 						tr.put(e.getKey(), new UserNode());
 					UserNode u = tr.get(e.getKey());
 					u.localInfSum.addAndGet(e.getValue());
-					u.totalInfSum.addAndGet(e.getValue());
+					if(!total.containsKey(e.getKey()))
+						total.put(e.getKey(), 0);
+					total.put(e.getKey(), total.get(e.getKey())+e.getValue());
 					u.updateMinLocalInf(e.getValue());
 					u.updateMaxLocalInf(e.getValue());
 				}
@@ -253,6 +320,7 @@ public class TotalData {
 					u.updateMaxTotalInf(e.getValue());
 				}
 				int d = done.incrementAndGet();
+				finishedFiles.put(f.getName(), "");
 				if (d % 1000 == 0) {
 					System.out.println("MISS " + graph.cache.getMissCnt() + "/"
 							+ graph.cache.getTotalCnt());
@@ -263,6 +331,11 @@ public class TotalData {
 							+ graph.cache.getCacheSize());
 					System.out.println("Finished Files: " + done);
 					System.out.println("Total users in tree " + tr.size());
+				}
+				if (d % 5000 == 0) {
+					writeHashMap("finishedUsers", tr);
+					writeHashMap("finishedFiles", finishedFiles);
+					System.exit(0);
 				}
 			} catch (Exception e) {
 				e.printStackTrace();

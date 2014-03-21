@@ -30,7 +30,7 @@ import twitter4j.URLEntity;
  */
 public class URLExtractor {
 
-	private static byte[] bytes = new byte[800000000];
+	private static byte[] bytes;
 	private static LRU<String, ArrayList<String>> urlSet;
 	private final static int MAX_SIZE = 1200;
 	private final static String inDirectory = "./Status";
@@ -38,6 +38,7 @@ public class URLExtractor {
 	private static HashMap<String, String> urlMap;
 
 	public static void main(String[] args) throws Exception {
+		bytes = new byte[800000000];
 		urlSet = new LRUcache<String, ArrayList<String>>(150000);
 		urlMap = readHashMap(inDirectory + "/urlMap");
 

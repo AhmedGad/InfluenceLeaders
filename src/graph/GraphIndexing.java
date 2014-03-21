@@ -28,7 +28,7 @@ import java.util.StringTokenizer;
  */
 public class GraphIndexing {
 
-	static byte[] bytes = new byte[800000000];
+	static byte[] bytes;
 
 	private final static int READ_FOLLOWERS = 0;
 	private final static int NEW_USER = 1;
@@ -39,6 +39,7 @@ public class GraphIndexing {
 	private final static HashSet<String> finishedSet = new HashSet<String>();
 
 	public static void main(String[] args) throws Exception {
+		bytes = new byte[800000000];
 		File inputFile = new File(graphDir);
 		BufferedWriter errorLog = new BufferedWriter(new FileWriter(new File(
 				"errorlog.txt")));

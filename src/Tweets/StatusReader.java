@@ -16,10 +16,11 @@ import twitter4j.URLEntity;
  */
 public class StatusReader {
 
-	static byte[] bytes = new byte[200000000];
+	static byte[] bytes;;
 	static HashMap<String, Integer> hash = new HashMap<String, Integer>();
 
 	public static void main(String[] args) throws Exception {
+		bytes = new byte[200000000];
 		File dir = new File("./Status");
 		int totalTweets = 0;
 		for (File f : dir.listFiles()) {

@@ -5,8 +5,11 @@ import graph.UserFollowers;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+
+import javax.management.Query;
 
 public class UsersLRUcache {
 	private int capacity, initCap;
@@ -22,7 +25,7 @@ public class UsersLRUcache {
 	public UsersLRUcache(int capacity) {
 		this.capacity = capacity;
 		initCap = capacity;
-		dequeue = new ArrayDeque<Long>();
+		dequeue = new LinkedList<Long>();
 		hashMap = new HashMap<Long, UserFollowers>();
 		missCnt = new AtomicInteger(0);
 		total = new AtomicInteger(0);
