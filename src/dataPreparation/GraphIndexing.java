@@ -8,6 +8,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileReader;
 import java.io.FileWriter;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.HashSet;
 import java.util.StringTokenizer;
@@ -32,10 +33,21 @@ public class GraphIndexing {
 	private final static int READ_FOLLOWERS = 0;
 	private final static int NEW_USER = 1;
 	private final static int FIRST_LINE_AFTER_NEW_USER = 2;
-	private final String outDir = "./Users/";
+	private final String outDir = "./Users-trimmed/";
 	private final String graphDir = "./Graph/";
 	private final File finished = new File("./Users/finished");
 	private final HashSet<String> finishedSet = new HashSet<String>();
+	private HashSet<Long> set;
+
+	public GraphIndexing(File activeUsers) throws IOException {
+		set = new HashSet<Long>();
+		BufferedReader reader = new BufferedReader(new FileReader(activeUsers));
+		String s;
+		while ((s = reader.readLine()) != null) {
+			set.add(Long.parseLong(s));
+		}
+		reader.close();
+	}
 
 	public void start() throws Exception {
 		File inputFile = new File(graphDir);
@@ -55,6 +67,7 @@ public class GraphIndexing {
 
 		BufferedWriter finishedWriter = new BufferedWriter(new FileWriter(
 				finished, true));
+		long t1 = System.currentTimeMillis();
 
 		for (File f : inputFile.listFiles()) {
 			if (f.getName().startsWith("graph") && f.getName().endsWith(".txt")
@@ -65,7 +78,6 @@ public class GraphIndexing {
 				int state = NEW_USER;
 				int NumUsers = 0;
 
-				long t1 = System.currentTimeMillis();
 				FileInputStream fis;
 				DataInputStream dis = new DataInputStream(
 						fis = new FileInputStream(f));
@@ -132,8 +144,9 @@ public class GraphIndexing {
 
 				fis.close();
 				dis.close();
-				System.out.println(NumUsers + " "
-						+ (System.currentTimeMillis() - t1));
+				if (NumUsers % 1000 == 0)
+					System.out.println(NumUsers + ", time millis: "
+							+ (System.currentTimeMillis() - t1));
 				if (ok) {
 					finishedWriter.write(f.getName() + "\n");
 					finishedWriter.flush();
@@ -147,7 +160,15 @@ public class GraphIndexing {
 	}
 
 	public static void main(String[] args) throws Exception {
-		GraphIndexing graphIndexing = new GraphIndexing();
+		File activeUsers = new File("activeUser.txt");
+		if (!activeUsers.exists()) {
+			System.exit(0);
+		}
+		GraphIndexing graphIndexing = new GraphIndexing(activeUsers);
+		File outDir = new File(graphIndexing.outDir);
+		if (!outDir.exists()) {
+			outDir.mkdir();
+		}
 		graphIndexing.start();
 	}
 }
