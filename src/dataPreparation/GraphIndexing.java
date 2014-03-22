@@ -35,7 +35,7 @@ public class GraphIndexing {
 	private final static int FIRST_LINE_AFTER_NEW_USER = 2;
 	private final String outDir = "./Users-trimmed/";
 	private final String graphDir = "./Graph/";
-	private final File finished = new File("./Users/finished");
+	private final File finished = new File("./Users-trimmed/finished");
 	private final HashSet<String> finishedSet = new HashSet<String>();
 	private HashSet<Long> set;
 
@@ -110,7 +110,11 @@ public class GraphIndexing {
 							writer.close();
 							state++;
 						} else {
-							writer.write(s + "\n");
+							try {
+								if (!set.contains(Long.parseLong(s)))
+									writer.write(s + "\n");
+							} catch (Exception e) {
+							}
 						}
 					} else if (state == NEW_USER) {
 						NumUsers++;
