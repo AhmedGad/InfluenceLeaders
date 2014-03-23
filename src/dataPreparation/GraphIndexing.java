@@ -111,7 +111,7 @@ public class GraphIndexing {
 							state++;
 						} else {
 							try {
-								if (!set.contains(Long.parseLong(s)))
+								if (set.contains(Long.parseLong(s)))
 									writer.write(s + "\n");
 							} catch (Exception e) {
 							}
