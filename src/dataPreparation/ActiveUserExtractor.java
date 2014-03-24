@@ -100,7 +100,7 @@ public class ActiveUserExtractor {
 		if (!new File("./logs/").exists()) {
 			new File("./logs/").mkdir();
 		}
-		ActiveUserExtractor extractor = new ActiveUserExtractor("./Statuses/",
+		ActiveUserExtractor extractor = new ActiveUserExtractor("./Status/",
 				new File("activeUser.txt"), 200000000);
 		extractor.start();
 	}

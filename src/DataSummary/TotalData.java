@@ -291,14 +291,15 @@ public class TotalData {
 				for (int i = lines.size() - 1; i >= 0; i--) {
 					StringTokenizer st = new StringTokenizer(lines.get(i), ":");
 					long child = Long.parseLong(st.nextToken());
-					if (parent.containsKey(child)) {
-						long parentId = parent.get(child);
+					long parentId;
+					if (parent.containsKey(child)) 
+						parentId = parent.get(child);
+					else parentId = child;
 						if (!total.containsKey(parentId))
 							total.put(parentId, 0);
 						if (local.containsKey(child)) // zero if no cascades
 							total.put(parentId,
 									total.get(parentId) + local.get(child));
-					}
 				}
 				for (Entry<Long, Integer> e : local.entrySet()) {
 					if (!tr.containsKey(e.getKey()))

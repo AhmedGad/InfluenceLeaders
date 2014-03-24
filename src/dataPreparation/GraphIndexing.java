@@ -6,12 +6,18 @@ import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.StringTokenizer;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Given the Graph files this class will extract every user as a file that
@@ -33,14 +39,17 @@ public class GraphIndexing {
 	private final static int READ_FOLLOWERS = 0;
 	private final static int NEW_USER = 1;
 	private final static int FIRST_LINE_AFTER_NEW_USER = 2;
-	private final String outDir = "./Users-trimmed/";
+	private final String outDir = "./Users-trimmed4/";
 	private final String graphDir = "./Graph/";
-	private final File finished = new File("./Users-trimmed/finished");
+	private final File finished = new File("./Users-trimmed4/finished");
 	private final HashSet<String> finishedSet = new HashSet<String>();
 	private HashSet<Long> set;
+	private final HashMap<Long, Integer> map;
+	private static int nextId = 0;
 
 	public GraphIndexing(File activeUsers) throws IOException {
 		set = new HashSet<Long>();
+		map = new HashMap<Long, Integer>();
 		BufferedReader reader = new BufferedReader(new FileReader(activeUsers));
 		String s;
 		while ((s = reader.readLine()) != null) {
@@ -111,8 +120,12 @@ public class GraphIndexing {
 							state++;
 						} else {
 							try {
-								if (set.contains(Long.parseLong(s)))
-									writer.write(s + "\n");
+								long uid = Long.parseLong(s);
+								if (set.contains(uid)) {
+									if (!map.containsKey(uid))
+										map.put(uid, nextId++);
+									writer.write(map.get(uid) + "\n");
+								}
 							} catch (Exception e) {
 							}
 						}
@@ -161,8 +174,19 @@ public class GraphIndexing {
 		finishedWriter.close();
 		errorLog.close();
 		System.out.println("Finished");
+		writeHashMap("UsersMapping", map);
 	}
 
+	private static void writeHashMap(String directory, Object map)
+			throws IOException {
+		FileOutputStream fout = new FileOutputStream(directory);
+		ObjectOutputStream oos = new ObjectOutputStream(fout);
+		oos.writeObject(map);
+
+		oos.close();
+		fout.close();
+	}
+	
 	public static void main(String[] args) throws Exception {
 		File activeUsers = new File("activeUser.txt");
 		if (!activeUsers.exists()) {

@@ -11,13 +11,15 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.TreeSet;
 
 public class GraphTrimmer {
 	File[] fileList;
 	byte[] buffArr;
 	String outDir;
-	HashSet<Long> set;
+	TreeSet<Long> set;
 
 	/**
 	 * VI Note: RUN ActiveUserExtractor FIRST.
@@ -31,7 +33,7 @@ public class GraphTrimmer {
 		fileList = new File(graphDir).listFiles();
 		buffArr = new byte[maxUserFileSize];
 		this.outDir = outDir;
-		set = new HashSet<Long>();
+		set = new TreeSet<Long>();
 		BufferedReader reader = new BufferedReader(new FileReader(activeUsers));
 		String s;
 		while ((s = reader.readLine()) != null) {
@@ -44,7 +46,7 @@ public class GraphTrimmer {
 		System.out.println("GraphTrimmer started!");
 		PrintWriter errorLogWriter = new PrintWriter(new File(
 				"./logs/GraphTrimmer-error-log.txt"));
-		PrintWriter logWriter = new PrintWriter("./logs/GraphTrimmer-log.txt");
+//		PrintWriter logWriter = new PrintWriter("./logs/GraphTrimmer-log.txt");
 		int beforeCnt = 0, afterCnt = 0, finishedUsers = 0;
 
 		for (File file : fileList) {
@@ -53,8 +55,8 @@ public class GraphTrimmer {
 			} catch (Exception e) {
 				continue;
 			}
-			logWriter.println(file.getName() + " -> started");
-			logWriter.flush();
+//			logWriter.println(file.getName() + " -> started");
+//			logWriter.flush();
 
 			FileInputStream fis = new FileInputStream(file);
 			DataInputStream dis = new DataInputStream(fis);
@@ -81,8 +83,8 @@ public class GraphTrimmer {
 			}
 			reader.close();
 			writer.close();
-			logWriter.write(file.getName() + "\tfinished.\n");
-			logWriter.flush();
+//			logWriter.write(file.getName() + "\tfinished.\n");
+//			logWriter.flush();
 			finishedUsers++;
 			if (finishedUsers % 10000 == 0) {
 				System.out.println(finishedUsers
@@ -91,14 +93,14 @@ public class GraphTrimmer {
 			}
 		}
 		// Percentage
-		logWriter.write("\n\n*****\tFinished! .. beforeCnt: " + beforeCnt
-				+ ", afterCnt: " + afterCnt + ", trimmed Percentage: "
-				+ afterCnt * 100 / beforeCnt + "%\n");
+//		logWriter.write("\n\n*****\tFinished! .. beforeCnt: " + beforeCnt
+//				+ ", afterCnt: " + afterCnt + ", trimmed Percentage: "
+//				+ afterCnt * 100 / beforeCnt + "%\n");
 		System.out.println("\n\n*****\tFinished! .. beforeCnt: " + beforeCnt
 				+ ", afterCnt: " + afterCnt + ", trimmed-to-original Percentage: "
 				+ afterCnt * 100 / beforeCnt + "%");
 		errorLogWriter.close();
-		logWriter.close();
+//		logWriter.close();
 	}
 
 	public static void main(String[] args) throws IOException {
