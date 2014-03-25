@@ -1,27 +1,26 @@
 package graph;
 
 import java.util.Arrays;
-
-import graphBuilder.MyLongArrayList;
+import graphBuilder.MyIntegerArrayList;
 
 /**
  * contains user's Followers
  */
 public class UserFollowers {
 
-	private long uid;
-	private long[] followers;
+	private int uid;
+	private int[] followers;
 
-	public UserFollowers(long uid, MyLongArrayList followersList) {
+	public UserFollowers(int uid, MyIntegerArrayList followersList) {
 		this.uid = uid;
-		followers = new long[followersList.size()];
+		followers = new int[followersList.size()];
 		for (int i = 0; i < followersList.size(); i++) {
 			followers[i] = followersList.get(i);
 		}
 		Arrays.sort(followers);
 	}
 
-	public boolean hasFollower(long uid) {
+	public boolean hasFollower(int uid) {
 		return Arrays.binarySearch(followers, uid) >= 0;
 	}
 

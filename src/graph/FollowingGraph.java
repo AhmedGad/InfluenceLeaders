@@ -1,6 +1,9 @@
 package graph;
 
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.ObjectInputStream;
+import java.util.HashMap;
 import java.util.HashSet;
 
 import cache.UsersLRUcache;
@@ -10,20 +13,31 @@ import cache.UsersLRUcache;
  */
 
 public class FollowingGraph implements Graph {
+	private static final String MAP_DIR = "UsersMapping";
 	public String dir;
 	public UsersLRUcache cache;
-	private HashSet<Long> usersSet;
+	private HashSet<Integer> usersSet;
+	private HashMap<Long, Integer> userMap;
 
+	@SuppressWarnings("unchecked")
 	public FollowingGraph(String dir, int cacheSize) {
 		this.dir = dir;
 		cache = new UsersLRUcache(cacheSize);
-		usersSet = new HashSet<Long>();
+		usersSet = new HashSet<Integer>();
 		File[] fileList = new File(dir).listFiles();
 		for (File file : fileList) {
 			try {
-				usersSet.add(Long.parseLong(file.getName()));
+				usersSet.add(Integer.parseInt(file.getName()));
 			} catch (Exception e) {
 			}
+		}
+		try {
+			FileInputStream fin = new FileInputStream(MAP_DIR);
+			ObjectInputStream oos = new ObjectInputStream(fin);
+			userMap = (HashMap<Long, Integer>) oos.readObject();
+			oos.close();
+		} catch (Exception e) {
+			e.printStackTrace();
 		}
 	}
 
@@ -39,15 +53,16 @@ public class FollowingGraph implements Graph {
 	 */
 	@Override
 	public boolean isFollowing(long u1, long u2) throws Exception {
-		UserFollowers u2followers = cache.get(u2);
+		int u1I = userMap.get(u1), u2I = userMap.get(u2);
+		UserFollowers u2followers = cache.get(u2I);
 		if (u2followers == null) {
-			u2followers = cache.get(u2);
+			u2followers = cache.get(u2I);
 			if (u2followers == null) {
-				u2followers = new UserFollowers(u2,
+				u2followers = new UserFollowers(u2I,
 						FollowersReader.loadFollowers(u2, dir));
-				cache.add(u2, u2followers);
+				cache.add(u2I, u2followers);
 			}
 		}
-		return u2followers.hasFollower(u1);
+		return u2followers.hasFollower(u1I);
 	}
 }

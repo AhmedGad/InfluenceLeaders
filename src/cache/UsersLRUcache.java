@@ -1,21 +1,16 @@
 package cache;
 
 import graph.UserFollowers;
-
-import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.LinkedList;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
-
-import javax.management.Query;
 
 public class UsersLRUcache {
 	private int capacity, initCap;
 	AtomicInteger missCnt, total;
-	HashMap<Long, UserFollowers> hashMap;
-	Deque<Long> dequeue;
+	HashMap<Integer, UserFollowers> hashMap;
+	Deque<Integer> dequeue;
 
 	/**
 	 * 
@@ -25,13 +20,13 @@ public class UsersLRUcache {
 	public UsersLRUcache(int capacity) {
 		this.capacity = capacity;
 		initCap = capacity;
-		dequeue = new LinkedList<Long>();
-		hashMap = new HashMap<Long, UserFollowers>();
+		dequeue = new LinkedList<Integer>();
+		hashMap = new HashMap<Integer, UserFollowers>();
 		missCnt = new AtomicInteger(0);
 		total = new AtomicInteger(0);
 	}
 
-	public synchronized void add(Long key, UserFollowers value) {
+	public synchronized void add(Integer key, UserFollowers value) {
 		if (!hashMap.containsKey(key)) {
 			hashMap.put(key, value);
 			dequeue.addFirst(key);
@@ -42,7 +37,7 @@ public class UsersLRUcache {
 		}
 	}
 
-	public UserFollowers get(Long key) {
+	public UserFollowers get(Integer key) {
 		UserFollowers res = hashMap.get(key);
 		if (res == null)
 			missCnt.incrementAndGet();
