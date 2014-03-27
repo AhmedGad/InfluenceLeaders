@@ -16,18 +16,18 @@ public class FollowingGraph implements Graph {
 	private static final String MAP_DIR = "UsersMapping";
 	public String dir;
 	public UsersLRUcache cache;
-	private HashSet<Integer> usersSet;
+	private HashSet<Long> usersSet;
 	private HashMap<Long, Integer> userMap;
 
 	@SuppressWarnings("unchecked")
 	public FollowingGraph(String dir, int cacheSize) {
 		this.dir = dir;
 		cache = new UsersLRUcache(cacheSize);
-		usersSet = new HashSet<Integer>();
+		usersSet = new HashSet<Long>();
 		File[] fileList = new File(dir).listFiles();
 		for (File file : fileList) {
 			try {
-				usersSet.add(Integer.parseInt(file.getName()));
+				usersSet.add(Long.parseLong(file.getName()));
 			} catch (Exception e) {
 			}
 		}

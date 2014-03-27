@@ -20,6 +20,7 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.StringTokenizer;
 import java.util.TreeMap;
 import java.util.Map.Entry;
@@ -34,18 +35,19 @@ import Tweets.UsersReader;
 
 public class TotalData {
 
-	private final static String urlsDir = "./URLs";
+	private final static String urlsDir = "../../data/URLs";
 	private final static String outDirectory = "./Final/";
-	private final static String usersDirectory = "./Users/";
+	private final static String usersDirectory = "../../data/Users-trimmed6/";
 	private static ConcurrentHashMap<Long, UserNode> tr;
 	private static ConcurrentHashMap<String, String> finishedFiles;
 	private static AtomicInteger done = new AtomicInteger(0);
 	private static final int NUM_THREADS = 20;
-	private static final int MAX_FOLLOWERS_CACHED = 200000000;
-//	 private static final ArrayBlockingQueue<Graph> graphs = new
-//	 ArrayBlockingQueue<Graph>(
-//	 NUM_THREADS + 1);
-	private static final FollowingGraph graph = new FollowingGraph(usersDirectory, MAX_FOLLOWERS_CACHED);
+	private static final int MAX_FOLLOWERS_CACHED = 700000000;
+	// private static final ArrayBlockingQueue<Graph> graphs = new
+	// ArrayBlockingQueue<Graph>(
+	// NUM_THREADS + 1);
+	private static final FollowingGraph graph = new FollowingGraph(
+			usersDirectory, MAX_FOLLOWERS_CACHED);
 
 	public static void main(String[] args) throws Exception {
 		finishedFiles = readHashMap("finishedFiles");
@@ -53,23 +55,24 @@ public class TotalData {
 		System.out.println(finishedFiles.size());
 		System.out.println(tr.size());
 		File dir = new File(urlsDir);
-//		for (int i = 0; i < NUM_THREADS; i++)
-//			graphs.add(new FollowingGraph(usersDirectory, MAX_FOLLOWERS_CACHED
-//					/ NUM_THREADS));
-		System.out.println("Total Files: " + dir.listFiles().length);
+		// for (int i = 0; i < NUM_THREADS; i++)
+		// graphs.add(new FollowingGraph(usersDirectory, MAX_FOLLOWERS_CACHED
+		// / NUM_THREADS));
+		File[] list = dir.listFiles();
+		System.out.println("Total Files: " + list.length);
 		ExecutorService executor = Executors.newFixedThreadPool(NUM_THREADS);
 		int cnt = 0;
-		for (File f : dir.listFiles()) {
+		for (File f : list) {
 			cnt++;
 			if (finishedFiles.containsKey(f.getName()))
 				continue;
 			Task task = new Task(f);
 			executor.execute(task);
-			if(cnt == 5000)
-				break;
+//			if (cnt == 5000)
+//				break;
 		}
 		executor.shutdown();
-		executor.awaitTermination(60,TimeUnit.MINUTES);
+		executor.awaitTermination(60, TimeUnit.MINUTES);
 		System.out.println(tr.size());
 		UsersReader reader = UsersReader.getInstance();
 		FileWriter fw = new FileWriter(outDirectory + "TotalData.txt", false);
@@ -292,23 +295,24 @@ public class TotalData {
 					StringTokenizer st = new StringTokenizer(lines.get(i), ":");
 					long child = Long.parseLong(st.nextToken());
 					long parentId;
-					if (parent.containsKey(child)) 
+					if (parent.containsKey(child))
 						parentId = parent.get(child);
-					else parentId = child;
-						if (!total.containsKey(parentId))
-							total.put(parentId, 0);
-						if (local.containsKey(child)) // zero if no cascades
-							total.put(parentId,
-									total.get(parentId) + local.get(child));
+					else
+						parentId = child;
+					if (!total.containsKey(parentId))
+						total.put(parentId, 0);
+					if (local.containsKey(child)) // zero if no cascades from this child
+						total.put(parentId,
+								total.get(parentId) + local.get(child));
 				}
 				for (Entry<Long, Integer> e : local.entrySet()) {
 					if (!tr.containsKey(e.getKey()))
 						tr.put(e.getKey(), new UserNode());
 					UserNode u = tr.get(e.getKey());
 					u.localInfSum.addAndGet(e.getValue());
-					if(!total.containsKey(e.getKey()))
+					if (!total.containsKey(e.getKey()))
 						total.put(e.getKey(), 0);
-					total.put(e.getKey(), total.get(e.getKey())+e.getValue());
+					total.put(e.getKey(), total.get(e.getKey()) + e.getValue());
 					u.updateMinLocalInf(e.getValue());
 					u.updateMaxLocalInf(e.getValue());
 				}
@@ -316,9 +320,16 @@ public class TotalData {
 					if (!tr.containsKey(e.getKey()))
 						tr.put(e.getKey(), new UserNode());
 					UserNode u = tr.get(e.getKey());
-					u.totalInfSum.addAndGet(e.getValue());
-					u.updateMinTotalInf(e.getValue());
-					u.updateMaxTotalInf(e.getValue());
+					if (!e.getValue().equals(new Integer(0))) {
+						u.totalInfSum.addAndGet(e.getValue());
+						u.updateMinTotalInf(e.getValue());
+
+//						System.out.println("updating Mx total Info "
+//								+ e.getValue());
+						u.updateMaxTotalInf(e.getValue());
+//						System.out.println("finished with Mx total info "
+//								+ e.getValue());
+					}
 				}
 				int d = done.incrementAndGet();
 				finishedFiles.put(f.getName(), "");
@@ -336,7 +347,6 @@ public class TotalData {
 				if (d % 5000 == 0) {
 					writeHashMap("finishedUsers", tr);
 					writeHashMap("finishedFiles", finishedFiles);
-					System.exit(0);
 				}
 			} catch (Exception e) {
 				e.printStackTrace();
