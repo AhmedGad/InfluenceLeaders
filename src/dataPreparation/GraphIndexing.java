@@ -6,18 +6,16 @@ import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.io.PrintWriter;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.StringTokenizer;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Given the Graph files this class will extract every user as a file that
@@ -56,12 +54,16 @@ public class GraphIndexing {
 			set.add(Long.parseLong(s));
 		}
 		reader.close();
+		System.out.println("active users: " + set.size());
+		log.println("active users: " + set.size());
+		log.flush();
 	}
+
+	PrintWriter log = new PrintWriter(new File("log-GraphIndexing.txt"));
+	long beforeCnt, afteCnt;
 
 	public void start() throws Exception {
 		File inputFile = new File(graphDir);
-		BufferedWriter errorLog = new BufferedWriter(new FileWriter(new File(
-				"errorlog.txt")));
 		if (!finished.exists()) {
 			finished.createNewFile();
 		}
@@ -78,14 +80,17 @@ public class GraphIndexing {
 				finished, true));
 		long t1 = System.currentTimeMillis();
 
+		PrintWriter errorLog = new PrintWriter(new File(
+				"errorlog-GraphIndexing.txt"));
+		int NumUsers = 0, NumUsers2 = 0;
+
 		for (File f : inputFile.listFiles()) {
 			if (f.getName().startsWith("graph") && f.getName().endsWith(".txt")
 					&& !finishedSet.contains(f.getName())) {
-				System.out.println(f.getAbsolutePath());
+				log.println(f.getAbsolutePath());
 				boolean ok = true;
 
 				int state = NEW_USER;
-				int NumUsers = 0;
 
 				FileInputStream fis;
 				DataInputStream dis = new DataInputStream(
@@ -94,8 +99,8 @@ public class GraphIndexing {
 				if (size != loaded && loaded > 0) {
 					System.err.println(f.getAbsolutePath() + " loaded: "
 							+ loaded + " total Size: " + size);
-					errorLog.write(f.getAbsolutePath() + " loaded: " + loaded
-							+ " total Size: " + size + "\n");
+					errorLog.println(f.getAbsolutePath() + " loaded: " + loaded
+							+ " total Size: " + size);
 					errorLog.flush();
 					ok = false;
 				}
@@ -121,7 +126,9 @@ public class GraphIndexing {
 						} else {
 							try {
 								long uid = Long.parseLong(s);
+								beforeCnt++;
 								if (set.contains(uid)) {
+									afteCnt++;
 									if (!map.containsKey(uid))
 										map.put(uid, nextId++);
 									writer.write(map.get(uid) + "\n");
@@ -131,6 +138,7 @@ public class GraphIndexing {
 						}
 					} else if (state == NEW_USER) {
 						NumUsers++;
+						NumUsers2++;
 						StringTokenizer tok = new StringTokenizer(s);
 						writer = new BufferedWriter(new FileWriter(new File(
 								outDir + tok.nextToken())));
@@ -161,16 +169,36 @@ public class GraphIndexing {
 
 				fis.close();
 				dis.close();
-				if (NumUsers % 1000 == 0)
-					System.out.println(NumUsers + ", time millis: "
-							+ (System.currentTimeMillis() - t1));
+				if (NumUsers2 > 1000) {
+					long elapsed = (System.currentTimeMillis() - t1) / 1000;
+					System.out.println("finished users: " + NumUsers
+							+ " before cnt: " + beforeCnt + " after cnt: "
+							+ afteCnt + ", elapsed time: " + elapsed
+							+ "seconds, users/sec: " + NumUsers / elapsed
+							+ ", trimmed/original graph size: "
+							+ (afteCnt * 100 / beforeCnt) / 100.0);
+					log.println("\nfinished users: " + NumUsers
+							+ " before cnt: " + beforeCnt + " after cnt: "
+							+ afteCnt + ", elapsed time: " + elapsed
+							+ "seconds, users/sec: " + NumUsers / elapsed
+							+ ", trimmed/original graph size: "
+							+ (afteCnt * 100 / beforeCnt) / 100.0 + "\n");
+					log.flush();
+					NumUsers2 = 0;
+				}
 				if (ok) {
 					finishedWriter.write(f.getName() + "\n");
 					finishedWriter.flush();
 				}
 			}
 		}
-
+		System.out.println("finished users: " + NumUsers + " before cnt: "
+				+ beforeCnt + " after cnt: " + afteCnt + ", time millis: "
+				+ (System.currentTimeMillis() - t1));
+		log.println("finished users: " + NumUsers + ", before cnt: "
+				+ beforeCnt + ", after cnt: " + afteCnt + ", time millis: "
+				+ (System.currentTimeMillis() - t1));
+		log.flush();
 		finishedWriter.close();
 		errorLog.close();
 		System.out.println("Finished");
@@ -186,7 +214,7 @@ public class GraphIndexing {
 		oos.close();
 		fout.close();
 	}
-	
+
 	public static void main(String[] args) throws Exception {
 		File activeUsers = new File("activeUser.txt");
 		if (!activeUsers.exists()) {
@@ -194,6 +222,8 @@ public class GraphIndexing {
 		}
 		GraphIndexing graphIndexing = new GraphIndexing(activeUsers);
 		File outDir = new File(graphIndexing.outDir);
+		System.out.println(outDir.getAbsolutePath() + "\t" + outDir.exists()
+				+ "\n");
 		if (!outDir.exists()) {
 			outDir.mkdir();
 		}

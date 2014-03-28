@@ -22,15 +22,10 @@ public class FollowingGraph implements Graph {
 	@SuppressWarnings("unchecked")
 	public FollowingGraph(String dir, int cacheSize) {
 		this.dir = dir;
-		cache = new UsersLRUcache(cacheSize);
+		// make cache unlimited .. graph can fit in memory after trimming
+		cache = new UsersLRUcache(Integer.MAX_VALUE);
 		usersSet = new HashSet<Long>();
-		File[] fileList = new File(dir).listFiles();
-		for (File file : fileList) {
-			try {
-				usersSet.add(Long.parseLong(file.getName()));
-			} catch (Exception e) {
-			}
-		}
+
 		try {
 			FileInputStream fin = new FileInputStream(MAP_DIR);
 			ObjectInputStream oos = new ObjectInputStream(fin);
@@ -39,6 +34,23 @@ public class FollowingGraph implements Graph {
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
+
+		File[] fileList = new File(dir).listFiles();
+		for (File file : fileList) {
+			try {
+				Long id = Long.parseLong(file.getName());
+				usersSet.add(id);
+				loadtoCache(id);
+			} catch (Exception e) {
+			}
+		}
+	}
+
+	void loadtoCache(long id) throws Exception {
+		int uI = userMap.get(id);
+		UserFollowers u2followers = new UserFollowers(uI,
+				FollowersReader.loadFollowers(id, dir));
+		cache.add(uI, u2followers);
 	}
 
 	@Override
@@ -58,9 +70,8 @@ public class FollowingGraph implements Graph {
 		if (u2followers == null) {
 			u2followers = cache.get(u2I);
 			if (u2followers == null) {
-				u2followers = new UserFollowers(u2I,
-						FollowersReader.loadFollowers(u2, dir));
-				cache.add(u2I, u2followers);
+				System.err.println("try to load user from isFollowing method!");
+				loadtoCache(u2);
 			}
 		}
 		return u2followers.hasFollower(u1I);
