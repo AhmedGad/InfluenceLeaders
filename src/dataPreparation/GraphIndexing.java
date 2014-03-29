@@ -1,14 +1,15 @@
 package dataPreparation;
 
+import graph.UserFollowers;
+import graphBuilder.MyIntegerArrayList;
+
 import java.io.BufferedReader;
-import java.io.BufferedWriter;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.FileReader;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.ObjectOutputStream;
@@ -16,6 +17,7 @@ import java.io.PrintWriter;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.StringTokenizer;
+import java.util.TreeMap;
 
 /**
  * Given the Graph files this class will extract every user as a file that
@@ -39,8 +41,6 @@ public class GraphIndexing {
 	private final static int FIRST_LINE_AFTER_NEW_USER = 2;
 	private final String outDir = "./Users-trimmed6/";
 	private final String graphDir = "./Graph/";
-	private final File finished = new File("./Users-trimmed6/finished");
-	private final HashSet<String> finishedSet = new HashSet<String>();
 	private HashSet<Long> set;
 	private final HashMap<Long, Integer> map;
 	private static int nextId = 0;
@@ -62,22 +62,11 @@ public class GraphIndexing {
 	PrintWriter log = new PrintWriter(new File("log-GraphIndexing.txt"));
 	long beforeCnt, afteCnt;
 
-	public void start() throws Exception {
+	public TreeMap<Integer, UserFollowers> buildMap() throws Exception {
+		TreeMap<Integer, UserFollowers> graphMap = new TreeMap<Integer, UserFollowers>();
+
 		File inputFile = new File(graphDir);
-		if (!finished.exists()) {
-			finished.createNewFile();
-		}
-
-		BufferedReader finishedReader = new BufferedReader(new FileReader(
-				finished));
 		String s;
-		while ((s = finishedReader.readLine()) != null) {
-			finishedSet.add(s);
-		}
-		finishedReader.close();
-
-		BufferedWriter finishedWriter = new BufferedWriter(new FileWriter(
-				finished, true));
 		long t1 = System.currentTimeMillis();
 
 		PrintWriter errorLog = new PrintWriter(new File(
@@ -85,10 +74,8 @@ public class GraphIndexing {
 		int NumUsers = 0, NumUsers2 = 0;
 
 		for (File f : inputFile.listFiles()) {
-			if (f.getName().startsWith("graph") && f.getName().endsWith(".txt")
-					&& !finishedSet.contains(f.getName())) {
+			if (f.getName().startsWith("graph") && f.getName().endsWith(".txt")) {
 				log.println(f.getAbsolutePath());
-				boolean ok = true;
 
 				int state = NEW_USER;
 
@@ -102,7 +89,6 @@ public class GraphIndexing {
 					errorLog.println(f.getAbsolutePath() + " loaded: " + loaded
 							+ " total Size: " + size);
 					errorLog.flush();
-					ok = false;
 				}
 
 				ByteArrayInputStream in = new ByteArrayInputStream(bytes, 0,
@@ -110,18 +96,20 @@ public class GraphIndexing {
 				BufferedReader buff = new BufferedReader(new InputStreamReader(
 						in));
 
-				BufferedWriter writer = null;
+				MyIntegerArrayList list = null;
+				int id = -1;
 
 				while (true) {
 					s = buff.readLine();
 					if (s == null) {
-						if (writer != null)
-							writer.close();
+						if (list != null) {
+							graphMap.put(id, new UserFollowers(id, list));
+						}
 						break;
 					}
 					if (state == READ_FOLLOWERS) {
 						if (s.length() == 0) {
-							writer.close();
+							graphMap.put(id, new UserFollowers(id, list));
 							state++;
 						} else {
 							try {
@@ -131,7 +119,7 @@ public class GraphIndexing {
 									afteCnt++;
 									if (!map.containsKey(uid))
 										map.put(uid, nextId++);
-									writer.write(map.get(uid) + "\n");
+									list.add(map.get(uid));
 								}
 							} catch (Exception e) {
 							}
@@ -140,8 +128,13 @@ public class GraphIndexing {
 						NumUsers++;
 						NumUsers2++;
 						StringTokenizer tok = new StringTokenizer(s);
-						writer = new BufferedWriter(new FileWriter(new File(
-								outDir + tok.nextToken())));
+
+						long uid = Long.parseLong(tok.nextToken());
+						if (!map.containsKey(uid))
+							map.put(uid, nextId++);
+						id = map.get(uid);
+						list = new MyIntegerArrayList();
+
 						if (!tok.nextToken().equals("followers:")) {
 							System.err.println(f.getAbsolutePath()
 									+ "\t\"followers:\" word not found!!"
@@ -149,7 +142,6 @@ public class GraphIndexing {
 							errorLog.write(f.getAbsolutePath() + "\t"
 									+ "\"followers:\" word not found!!"
 									+ "\tcur line: " + s + "\n");
-							ok = false;
 						}
 						state++;
 					} else if (state == FIRST_LINE_AFTER_NEW_USER) {
@@ -161,7 +153,6 @@ public class GraphIndexing {
 							errorLog.write(f.getAbsolutePath()
 									+ "\tfirst line is not empty!!!!\tcur line: "
 									+ s + "\n");
-							ok = false;
 						}
 						state = 0;
 					}
@@ -186,10 +177,6 @@ public class GraphIndexing {
 					log.flush();
 					NumUsers2 = 0;
 				}
-				if (ok) {
-					finishedWriter.write(f.getName() + "\n");
-					finishedWriter.flush();
-				}
 			}
 		}
 		System.out.println("finished users: " + NumUsers + " before cnt: "
@@ -199,10 +186,10 @@ public class GraphIndexing {
 				+ beforeCnt + ", after cnt: " + afteCnt + ", time millis: "
 				+ (System.currentTimeMillis() - t1));
 		log.flush();
-		finishedWriter.close();
 		errorLog.close();
 		System.out.println("Finished");
 		writeHashMap("UsersMapping", map);
+		return graphMap;
 	}
 
 	private static void writeHashMap(String directory, Object map)
@@ -227,6 +214,9 @@ public class GraphIndexing {
 		if (!outDir.exists()) {
 			outDir.mkdir();
 		}
-		graphIndexing.start();
+		TreeMap<Integer, UserFollowers> map = graphIndexing.buildMap();
+		System.out.println("buildMap finished .. start writing map with size: "
+				+ map.size());
+		writeHashMap("graphMap", map);
 	}
 }
