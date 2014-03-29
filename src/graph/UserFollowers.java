@@ -1,13 +1,15 @@
 package graph;
 
+import java.io.Serializable;
 import java.util.Arrays;
 import graphBuilder.MyIntegerArrayList;
 
 /**
  * contains user's Followers
  */
-public class UserFollowers {
+public class UserFollowers implements Serializable {
 
+	private static final long serialVersionUID = 1L;
 	private int uid;
 	private int[] followers;
 
