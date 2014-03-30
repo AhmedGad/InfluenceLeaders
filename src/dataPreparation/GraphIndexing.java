@@ -40,7 +40,7 @@ public class GraphIndexing {
 	private final static int NEW_USER = 1;
 	private final static int FIRST_LINE_AFTER_NEW_USER = 2;
 	private final String outDir = "./Users-trimmed6/";
-	private final String graphDir = "./Graph/";
+	private final String graphDir = "../../data/Graph/";
 	private HashSet<Long> set;
 	private final HashMap<Long, Integer> map;
 	private static int nextId = 0;

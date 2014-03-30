@@ -41,13 +41,11 @@ public class TotalData {
 	private static ConcurrentHashMap<Long, UserNode> tr;
 	private static ConcurrentHashMap<String, String> finishedFiles;
 	private static AtomicInteger done = new AtomicInteger(0);
-	private static final int NUM_THREADS = 20;
-	private static final int MAX_FOLLOWERS_CACHED = 700000000;
+	private static final int NUM_THREADS = 30;
 	// private static final ArrayBlockingQueue<Graph> graphs = new
 	// ArrayBlockingQueue<Graph>(
 	// NUM_THREADS + 1);
-	private static final FollowingGraph graph = new FollowingGraph(
-			usersDirectory, MAX_FOLLOWERS_CACHED);
+	private static final FollowingGraph graph = new FollowingGraph("graphMap");
 
 	public static void main(String[] args) throws Exception {
 		finishedFiles = readHashMap("finishedFiles");
@@ -61,15 +59,13 @@ public class TotalData {
 		File[] list = dir.listFiles();
 		System.out.println("Total Files: " + list.length);
 		ExecutorService executor = Executors.newFixedThreadPool(NUM_THREADS);
-		int cnt = 0;
 		for (File f : list) {
-			cnt++;
 			if (finishedFiles.containsKey(f.getName()))
 				continue;
 			Task task = new Task(f);
 			executor.execute(task);
-//			if (cnt == 5000)
-//				break;
+			// if (cnt == 5000)
+			// break;
 		}
 		executor.shutdown();
 		executor.awaitTermination(60, TimeUnit.MINUTES);
@@ -301,7 +297,8 @@ public class TotalData {
 						parentId = child;
 					if (!total.containsKey(parentId))
 						total.put(parentId, 0);
-					if (local.containsKey(child)) // zero if no cascades from this child
+					if (local.containsKey(child)) // zero if no cascades from
+													// this child
 						total.put(parentId,
 								total.get(parentId) + local.get(child));
 				}
@@ -324,27 +321,20 @@ public class TotalData {
 						u.totalInfSum.addAndGet(e.getValue());
 						u.updateMinTotalInf(e.getValue());
 
-//						System.out.println("updating Mx total Info "
-//								+ e.getValue());
+						// System.out.println("updating Mx total Info "
+						// + e.getValue());
 						u.updateMaxTotalInf(e.getValue());
-//						System.out.println("finished with Mx total info "
-//								+ e.getValue());
+						// System.out.println("finished with Mx total info "
+						// + e.getValue());
 					}
 				}
 				int d = done.incrementAndGet();
 				finishedFiles.put(f.getName(), "");
 				if (d % 1000 == 0) {
-					System.out.println("MISS " + graph.cache.getMissCnt() + "/"
-							+ graph.cache.getTotalCnt());
-					System.out.println("cahced Users "
-							+ graph.cache.getCachedUsers());
-					System.out.println("Done Files: " + done);
-					System.out.println("Cached Capacity: "
-							+ graph.cache.getCacheSize());
 					System.out.println("Finished Files: " + done);
 					System.out.println("Total users in tree " + tr.size());
 				}
-				if (d % 5000 == 0) {
+				if (d % 10000 == 0) {
 					writeHashMap("finishedUsers", tr);
 					writeHashMap("finishedFiles", finishedFiles);
 				}
