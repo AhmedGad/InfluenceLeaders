@@ -31,22 +31,24 @@ import twitter4j.URLEntity;
 public class URLExtractor {
 
 	private static byte[] bytes;
-	private static LRU<String, ArrayList<String>> urlSet;
-	private final static int MAX_SIZE = 1200;
-	private final static String inDirectory = "./Status";
-	private final static String outDirectory = "./URLs/";
-	private static HashMap<String, String> urlMap;
+	private static final String URLS_MAP_FILE = "UrlsMap";
+	private static HashMap<String, ArrayList<Integer>> urlmap;
+	// max size of sharing for a single url
+	private final static int MAX_SIZE = 1500;
+	private final static String inDirectory = "../../data/Status";
+	// private final static String outDirectory = "../../data/URLs/";
+	private final static int MAX_NUM_USERS = 240000000;
+
+	// private static HashMap<String, String> urlMap;
 
 	public static void main(String[] args) throws Exception {
 		bytes = new byte[800000000];
-		urlSet = new LRUcache<String, ArrayList<String>>(150000);
-		urlMap = readHashMap(inDirectory + "/urlMap");
-
+		urlmap = new HashMap<String, ArrayList<Integer>>(4500000);
+		HashMap<Long, Integer> map = readHashMap("UsersMapping");
 		File dir = new File(inDirectory);
 		int cnt = 0;
 		long t1 = System.currentTimeMillis();
-		int hit = 0, miss = 0, totalURLs = 0, removed = 0, reachMax = 0;
-		int statusCnt = 0;
+		int totalUsers = 0;
 
 		File[] lista = dir.listFiles();
 		// sorting in time so that the data is sorted in time
@@ -71,83 +73,52 @@ public class URLExtractor {
 						new ByteArrayInputStream(bytes));
 
 				try {
-					while (true) {
+					w: while (true) {
 						Status status = (Status) ois.readObject();
-						statusCnt++;
 						URLEntity[] urlEntity = status.getURLEntities();
 
 						for (int i = 0; i < urlEntity.length; i++) {
-							totalURLs++;
 
 							String url = urlEntity[i].getExpandedURL();
-							ArrayList<String> list = urlSet.get(url);
-							if (list == null) { // not found
-								miss++;
-								list = new ArrayList<String>();
-								Entry<String, ArrayList<String>> oldEntry = urlSet
-										.add(url, list);
+							if (!urlmap.containsKey(url))
+								urlmap.put(url, new ArrayList<Integer>());
 
-								if (oldEntry != null) {
-									removed++;
+							ArrayList<Integer> list = urlmap.get(url);
 
-									// write to file
-									writeEntry(oldEntry.getKey(),
-											oldEntry.getValue());
-									list.remove(oldEntry.getKey());
-								}
-							} else {
-								hit++;
-							}
+							if (!map.containsKey(status.getUser().getId()))
+								continue w;
+							int id = map.get(status.getUser().getId());
 
-							String str = status.getUser().getId()+":";
-							list.add(str);
-							if (list.size() >= MAX_SIZE) {
-								reachMax++;
-
-								// write to file
-								writeEntry(url, list);
-								// remove from urlSet
-								urlSet.remove(url);
+							if (list.size() < MAX_SIZE) {
+								list.add(id);
+								totalUsers++;
 							}
 						}
 					}
 				} catch (Exception e) {
-					// e.printStackTrace();
-					// System.out.println("Finish file : " + f.getName() +
-					// ", in : " + (System.currentTimeMillis() - t1));
-					// System.out.printf("Total URLs : %d, Hit : %d, Miss : %d\n",
-					// totalURLs, hit, miss);
 				}
 				fis.close();
 				dis.close();
 
-				writeHashMap(inDirectory + "/urlMap", urlMap);
 			}
+			System.out.println(totalUsers);
+			if (totalUsers > MAX_NUM_USERS)
+				break;
 		}
 
 		System.out.println("Finish Files");
 
-		// write remaining entries
-		LinkedList<Entry<String, ArrayList<String>>> list = urlSet
-				.getEntrySet();
-		System.out.println("cache size : " + list.size());
-		for (Entry<String, ArrayList<String>> entry : list) {
-			writeEntry(entry.getKey(), entry.getValue());
-		}
+		writeHashMap(URLS_MAP_FILE, urlmap);
 
-		writeHashMap(inDirectory + "/urlMap", urlMap);
 		System.out.println("== FINISHED Successfully ==");
 
-		System.out.println("Finish file in : "
-				+ (System.currentTimeMillis() - t1));
 		System.out
-				.printf("Total URLs : %d, Hit : %d, Miss : %d, Removed from cache : %d, Reach Max(%d) : %d\n",
-						totalURLs, hit, miss, removed, MAX_SIZE, reachMax);
+				.println("Finished in : " + (System.currentTimeMillis() - t1));
 
 	}
 
-	private static void writeHashMap(String directory,
-			HashMap<String, String> map) throws IOException {
+	private static void writeHashMap(String directory, Object map)
+			throws IOException {
 		FileOutputStream fout = new FileOutputStream(directory);
 		ObjectOutputStream oos = new ObjectOutputStream(fout);
 		oos.writeObject(map);
@@ -156,37 +127,36 @@ public class URLExtractor {
 		fout.close();
 	}
 
-	private static HashMap<String, String> readHashMap(String directory)
+	private static HashMap<Long, Integer> readHashMap(String directory)
 			throws IOException, ClassNotFoundException {
 		FileInputStream fin;
 		try {
 			fin = new FileInputStream(directory);
 		} catch (FileNotFoundException e) {
-			writeHashMap(directory, new HashMap<String, String>());
+			writeHashMap(directory, new HashMap<Long, Integer>());
 			fin = new FileInputStream(directory);
 		}
 
 		ObjectInputStream ois = new ObjectInputStream(fin);
 		@SuppressWarnings("unchecked")
-		HashMap<String, String> map = (HashMap<String, String>) ois
-				.readObject();
+		HashMap<Long, Integer> map = (HashMap<Long, Integer>) ois.readObject();
 		ois.close();
 
 		return map;
 	}
 
-	private static void writeEntry(String key, ArrayList<String> value)
-			throws IOException {
-		if (!urlMap.containsKey(key)) {
-			urlMap.put(key, urlMap.size() + "");
-		}
-
-		String fileName = urlMap.get(key);
-
-		FileWriter fw = new FileWriter(outDirectory + fileName, true);
-		for (String s : value) {
-			fw.write(s + "\n");
-		}
-		fw.close();
-	}
+	// private static void writeEntry(String key, ArrayList<String> value)
+	// throws IOException {
+	// if (!urlMap.containsKey(key)) {
+	// urlMap.put(key, urlMap.size() + "");
+	// }
+	//
+	// String fileName = urlMap.get(key);
+	//
+	// FileWriter fw = new FileWriter(outDirectory + fileName, true);
+	// for (String s : value) {
+	// fw.write(s + "\n");
+	// }
+	// fw.close();
+	// }
 }

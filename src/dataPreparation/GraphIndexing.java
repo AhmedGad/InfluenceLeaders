@@ -39,7 +39,6 @@ public class GraphIndexing {
 	private final static int READ_FOLLOWERS = 0;
 	private final static int NEW_USER = 1;
 	private final static int FIRST_LINE_AFTER_NEW_USER = 2;
-	private final String outDir = "./Users-trimmed6/";
 	private final String graphDir = "../../data/Graph/";
 	private HashSet<Long> set;
 	private final HashMap<Long, Integer> map;
@@ -208,12 +207,6 @@ public class GraphIndexing {
 			System.exit(0);
 		}
 		GraphIndexing graphIndexing = new GraphIndexing(activeUsers);
-		File outDir = new File(graphIndexing.outDir);
-		System.out.println(outDir.getAbsolutePath() + "\t" + outDir.exists()
-				+ "\n");
-		if (!outDir.exists()) {
-			outDir.mkdir();
-		}
 		TreeMap<Integer, UserFollowers> map = graphIndexing.buildMap();
 		System.out.println("buildMap finished .. start writing map with size: "
 				+ map.size());

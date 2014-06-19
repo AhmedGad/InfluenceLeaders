@@ -12,7 +12,7 @@ public interface Graph {
 	 *            user ID
 	 * @return true if user exists, false if not
 	 */
-	public boolean exists(Long uid);
+	public boolean exists(int uid);
 
 	/**
 	 * 
@@ -24,5 +24,5 @@ public interface Graph {
 	 * @throws Exception
 	 *            if u2 doesn't exist
 	 */
-	public boolean isFollowing(long uid1, long uid2) throws Exception;
+	public boolean isFollowing(int uid1, int uid2) throws Exception;
 }
