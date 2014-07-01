@@ -100,7 +100,9 @@ public class TotalData {
 				sb.append(e.getValue().localInfSum.floatValue()
 						/ e.getValue().tweets.floatValue() + ",");
 				sb.append(e.getValue().minLocalInf + ",");
-				sb.append(e.getValue().maxLocalInf + "\n");
+				sb.append(e.getValue().maxLocalInf + ",");
+				sb.append(u.id + "\n");
+								
 				fw.write(sb.toString());
 			} else {
 				if (u == null)
