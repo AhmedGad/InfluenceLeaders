@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.StringTokenizer;
 import java.util.TreeMap;
 import java.util.Map.Entry;
+import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -318,8 +319,12 @@ public class TotalData {
 		public void localRun(HashSet<Long> completedUsers,
 				TreeMap<Long, Long> parent, TreeMap<Long, Integer> local,
 				TreeMap<Long, Integer> total) throws InterruptedException {
+			TreeSet<Long> done = new TreeSet<Long>();
 			for (int i = lines.size() - 1; i >= 0; i--) {
 				long child = lines.get(i);
+				if(done.contains(child))
+					continue;
+				done.add(child);
 				long parentId;
 				if (parent.containsKey(child))
 					parentId = parent.get(child);
