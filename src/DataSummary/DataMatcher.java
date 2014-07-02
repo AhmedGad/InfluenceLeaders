@@ -33,7 +33,8 @@ public class DataMatcher {
 			long userID = parseID(line);
 
 			if (testDataMap.containsKey(userID)) {
-				outputWriter.write(userID + ":" + oldData + " >> " + testDataMap.get(userID).data + "\n");
+				outputWriter.write(userID + "(old):" + oldData + "\n");
+				outputWriter.write(userID + "(new):"  + testDataMap.get(userID).data + "\n\n");
 			} else {
 //				outputWriter.write(userID + ":" + oldData + " >> " + "NULL" + "\n");
 			}
